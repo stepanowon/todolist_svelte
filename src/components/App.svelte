@@ -11,9 +11,10 @@ export let state, callbacks;
     <div class="well">
         <div class="title">:: Todolist App</div>
     </div>
-    <div class="panel panel-default panel-borderless">
+    <div class="panel panel-borderless">
         <div class="panel-body">
             <InputTodo callbacks={callbacks} />
+            <br />
             <TodoList state={state} callbacks={callbacks} />
         </div>
     </div>

@@ -995,6 +995,8 @@ var app = (function () {
     	let div3;
     	let div2;
     	let t2;
+    	let br;
+    	let t3;
     	let current;
 
     	const inputtodo = new InputTodo({
@@ -1021,14 +1023,17 @@ var app = (function () {
     			div2 = element("div");
     			create_component(inputtodo.$$.fragment);
     			t2 = space();
+    			br = element("br");
+    			t3 = space();
     			create_component(todolist.$$.fragment);
     			attr_dev(div0, "class", "title");
     			add_location(div0, file$3, 11, 8, 216);
     			attr_dev(div1, "class", "well");
     			add_location(div1, file$3, 10, 4, 189);
+    			add_location(br, file$3, 16, 12, 402);
     			attr_dev(div2, "class", "panel-body");
-    			add_location(div2, file$3, 14, 8, 331);
-    			attr_dev(div3, "class", "panel panel-default panel-borderless");
+    			add_location(div2, file$3, 14, 8, 317);
+    			attr_dev(div3, "class", "panel panel-borderless");
     			add_location(div3, file$3, 13, 4, 272);
     			attr_dev(div4, "class", "container");
     			add_location(div4, file$3, 9, 0, 161);
@@ -1045,6 +1050,8 @@ var app = (function () {
     			append_dev(div3, div2);
     			mount_component(inputtodo, div2, null);
     			append_dev(div2, t2);
+    			append_dev(div2, br);
+    			append_dev(div2, t3);
     			mount_component(todolist, div2, null);
     			current = true;
     		},
