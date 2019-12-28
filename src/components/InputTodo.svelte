@@ -9,7 +9,6 @@ const addHandler = ()=> {
 
 const changeTodo = (e) => {
     todo = e.target.value;
-    console.log(todo)
 }
 </script>
 
