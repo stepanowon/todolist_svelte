@@ -488,7 +488,7 @@ var app = (function () {
 
     const file$1 = "components\\TodoItem.svelte";
 
-    // (20:8) {#if item.done}
+    // (24:8) {#if item.done}
     function create_if_block(ctx) {
     	let t;
 
@@ -508,7 +508,7 @@ var app = (function () {
     		block,
     		id: create_if_block.name,
     		type: "if",
-    		source: "(20:8) {#if item.done}",
+    		source: "(24:8) {#if item.done}",
     		ctx
     	});
 
@@ -538,11 +538,11 @@ var app = (function () {
     			span1 = element("span");
     			span1.textContent = "삭제";
     			attr_dev(span0, "class", span0_class_value = /*item*/ ctx[0].done ? "todo-done pointer" : "pointer");
-    			add_location(span0, file$1, 16, 4, 330);
+    			add_location(span0, file$1, 20, 4, 386);
     			attr_dev(span1, "class", "pull-right badge pointer");
-    			add_location(span1, file$1, 23, 4, 520);
+    			add_location(span1, file$1, 27, 4, 576);
     			attr_dev(li, "class", /*itemClassName*/ ctx[1]);
-    			add_location(li, file$1, 15, 0, 298);
+    			add_location(li, file$1, 19, 0, 354);
 
     			dispose = [
     				listen_dev(span0, "click", /*toggleHandler*/ ctx[2], false, false, false),
@@ -614,8 +614,14 @@ var app = (function () {
     		callbacks.deleteTodo(item.no);
     	};
 
-    	let itemClassName = "list-group-item";
-    	if (item.done) itemClassName += " list-group-item-success";
+    	let itemClassName;
+
+    	if (item.done) {
+    		itemClassName += "list-group-item list-group-item-success";
+    	} else {
+    		itemClassName += "list-group-item";
+    	}
+
     	const writable_props = ["item", "callbacks"];
 
     	Object.keys($$props).forEach(key => {

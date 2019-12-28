@@ -9,8 +9,12 @@ const deleteHandler = () => {
     callbacks.deleteTodo(item.no);
 }
 
-let itemClassName = "list-group-item";
-if (item.done) itemClassName +=" list-group-item-success";
+let itemClassName;
+if (item.done) { 
+    itemClassName +="list-group-item list-group-item-success";
+} else {
+    itemClassName +="list-group-item";
+}
 </script>
 
 <li class={itemClassName}>
