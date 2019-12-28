@@ -6,7 +6,7 @@ export let state, callbacks;
 
 <div class="row">
     <ul class="list-group">
-    {#each state.todolist as item}
+    {#each state.todolist as item (item.no)}
         <TodoItem item={item} callbacks={callbacks} />
     {/each}
     </ul>
