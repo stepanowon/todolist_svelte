@@ -1,7 +1,7 @@
 import AppContainer from "./AppContainer.svelte";
 
 const app = new AppContainer({
-  target: document.body
+  target: document.getElementById("root")
 });
 
 export default app;

@@ -37,7 +37,7 @@ let callbacks = { addTodo, deleteTodo, toggleDone };
 </script>
 
 <svelte:head>
-  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/bootstrap@3/dist/css/bootstrap.min.css">
 </svelte:head>
 
 <App state={state} callbacks={callbacks} />

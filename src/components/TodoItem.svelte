@@ -11,9 +11,9 @@ const deleteHandler = () => {
 
 let itemClassName;
 $: if (item.done) { 
-    itemClassName +="list-group-item list-group-item-success";
+    itemClassName = "list-group-item list-group-item-success";
 } else {
-    itemClassName +="list-group-item";
+    itemClassName = "list-group-item";
 }
 </script>
 
