@@ -14,8 +14,7 @@
   "dependencies": {
     "bootstrap": "3.4.1",
     "immer": "^5.1.0",
-    "svelte": "3.16.5",
-    "sveltestrap": "^3.2.9"
+    "svelte": "3.16.5"
   },
   "scripts": {
     "build": "rollup -c",
