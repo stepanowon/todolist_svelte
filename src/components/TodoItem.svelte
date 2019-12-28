@@ -10,10 +10,8 @@ const deleteHandler = () => {
 }
 
 let itemClassName;
-$: if (item.done) { 
-    itemClassName = "list-group-item list-group-item-success";
-} else {
-    itemClassName = "list-group-item";
+$: {
+    itemClassName = item.done ? "list-group-item list-group-item-success" : "list-group-item"
 }
 </script>
 

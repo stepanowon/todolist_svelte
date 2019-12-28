@@ -6,7 +6,6 @@ export let state, callbacks;
 // console.log(state);
 </script>
 
-
 <div class="container">
     <div class="well">
         <div class="title">:: Todolist App</div>
