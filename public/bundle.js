@@ -488,31 +488,59 @@ var app = (function () {
 
     const file$1 = "components\\TodoItem.svelte";
 
+    // (20:8) {#if item.done}
+    function create_if_block(ctx) {
+    	let t;
+
+    	const block = {
+    		c: function create() {
+    			t = text("(완료)");
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, t, anchor);
+    		},
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(t);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_if_block.name,
+    		type: "if",
+    		source: "(20:8) {#if item.done}",
+    		ctx
+    	});
+
+    	return block;
+    }
+
     function create_fragment$1(ctx) {
     	let li;
     	let span0;
     	let t0_value = /*item*/ ctx[0].todo + "";
     	let t0;
-    	let t1_value = (/*item*/ ctx[0].done ? "(완료)" : "") + "";
     	let t1;
     	let span0_class_value;
     	let t2;
     	let span1;
     	let dispose;
+    	let if_block = /*item*/ ctx[0].done && create_if_block(ctx);
 
     	const block = {
     		c: function create() {
     			li = element("li");
     			span0 = element("span");
     			t0 = text(t0_value);
-    			t1 = text(t1_value);
+    			t1 = space();
+    			if (if_block) if_block.c();
     			t2 = space();
     			span1 = element("span");
     			span1.textContent = "삭제";
     			attr_dev(span0, "class", span0_class_value = /*item*/ ctx[0].done ? "todo-done pointer" : "pointer");
     			add_location(span0, file$1, 16, 4, 330);
     			attr_dev(span1, "class", "pull-right badge pointer");
-    			add_location(span1, file$1, 20, 4, 489);
+    			add_location(span1, file$1, 23, 4, 520);
     			attr_dev(li, "class", /*itemClassName*/ ctx[1]);
     			add_location(li, file$1, 15, 0, 298);
 
@@ -529,12 +557,23 @@ var app = (function () {
     			append_dev(li, span0);
     			append_dev(span0, t0);
     			append_dev(span0, t1);
+    			if (if_block) if_block.m(span0, null);
     			append_dev(li, t2);
     			append_dev(li, span1);
     		},
     		p: function update(ctx, [dirty]) {
     			if (dirty & /*item*/ 1 && t0_value !== (t0_value = /*item*/ ctx[0].todo + "")) set_data_dev(t0, t0_value);
-    			if (dirty & /*item*/ 1 && t1_value !== (t1_value = (/*item*/ ctx[0].done ? "(완료)" : "") + "")) set_data_dev(t1, t1_value);
+
+    			if (/*item*/ ctx[0].done) {
+    				if (!if_block) {
+    					if_block = create_if_block(ctx);
+    					if_block.c();
+    					if_block.m(span0, null);
+    				}
+    			} else if (if_block) {
+    				if_block.d(1);
+    				if_block = null;
+    			}
 
     			if (dirty & /*item*/ 1 && span0_class_value !== (span0_class_value = /*item*/ ctx[0].done ? "todo-done pointer" : "pointer")) {
     				attr_dev(span0, "class", span0_class_value);
@@ -548,6 +587,7 @@ var app = (function () {
     		o: noop,
     		d: function destroy(detaching) {
     			if (detaching) detach_dev(li);
+    			if (if_block) if_block.d();
     			run_all(dispose);
     		}
     	};

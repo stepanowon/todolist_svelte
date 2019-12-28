@@ -16,7 +16,10 @@ if (item.done) itemClassName +=" list-group-item-success";
 <li class={itemClassName}>
     <span class={item.done ? "todo-done pointer": "pointer"}
         on:click={toggleHandler}>
-        {item.todo}{ item.done ? "(완료)" : "" } 
+        {item.todo}
+        {#if item.done}
+             (완료)
+        {/if}
     </span>
     <span class="pull-right badge pointer" 
         on:click={deleteHandler}>삭제</span>
