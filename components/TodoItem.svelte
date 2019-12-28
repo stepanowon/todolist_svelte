@@ -1,0 +1,23 @@
+<script>
+export let item, callbacks;
+
+const toggleHandler = () => {
+    callbacks.toggleDone(item.no);
+}
+
+const deleteHandler = () => {
+    callbacks.deleteTodo(item.no);
+}
+
+let itemClassName = "list-group-item";
+if (item.done) itemClassName +=" list-group-item-success";
+</script>
+
+<li class={itemClassName}>
+    <span class={item.done ? "todo-done pointer": "pointer"}
+        on:click={toggleHandler}>
+        {item.todo}{ item.done ? "(완료)" : "" } 
+    </span>
+    <span class="pull-right badge pointer" 
+        on:click={deleteHandler}>삭제</span>
+</li>
