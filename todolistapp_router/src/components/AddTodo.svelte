@@ -25,7 +25,7 @@ const cancelHandler = () => {
       <div class="modal-body">
         Todo : 
         <input id="msg" type="text" class="form-control" name="msg" 
-            placeholder="type todo!!" bind:value={todoitem.todo}><br/>
+            placeholder="Type todo here" bind:value={todoitem.todo}><br/>
         Description : 
         <textarea class="form-control" rows="3" bind:value={todoitem.desc}></textarea> 
       </div>

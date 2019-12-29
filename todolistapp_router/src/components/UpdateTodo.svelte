@@ -31,7 +31,7 @@ const cancelHandler = () => navigateTo('/')
         <input id="no" type="text" class="form-control" name="no" disabled bind:value={todoitem.no}><br/>
         Todo : 
         <input id="todo" type="text" class="form-control" name="msg" 
-            placeholder="type todo!!" bind:value={todoitem.todo}><br/>
+            placeholder="Type todo here" bind:value={todoitem.todo}><br/>
         Description : 
         <textarea class="form-control" rows="3" bind:value={todoitem.desc}></textarea>
         Done : <input type="checkbox" bind:checked={todoitem.done} />          
