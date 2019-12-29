@@ -3,9 +3,10 @@ import { navigateTo } from 'svelte-router-spa'
 import { state, updateTodo } from '../stores/todoStore';
 
 export let currentRoute;
+// export let params;
+// console.log(params);
 
 let todoitem = $state.todolist.find((item)=>item.no === parseInt(currentRoute.namedParams.no,10));
-console.log(todoitem)
 
 if (!todoitem)   navigateTo('/');
 
@@ -14,9 +15,8 @@ const updateTodoHandler = () => {
   navigateTo('/');
 }
 
-const cancelHandler = () => {
-  navigateTo('/')
-}
+const cancelHandler = () => navigateTo('/')
+
 </script>
 
 <div class="centered-modal fade in" tabindex="0" role="dialog">
@@ -34,11 +34,11 @@ const cancelHandler = () => {
             placeholder="type todo!!" bind:value={todoitem.todo}><br/>
         Description : 
         <textarea class="form-control" rows="3" bind:value={todoitem.desc}></textarea>
-        Completed : <input type="checkbox" bind:checked={todoitem.done} />          
+        Done : <input type="checkbox" bind:checked={todoitem.done} />          
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-default" on:click={updateTodoHandler}>수 정</button>
-        <button type="button" class="btn btn-primary" data-dismiss="modal" on:click={cancelHandler}>취 소</button>
+        <button type="button" class="btn btn-default" on:click={updateTodoHandler}>Update</button>
+        <button type="button" class="btn btn-primary" data-dismiss="modal" on:click={cancelHandler}>Cancel</button>
       </div>
     </div>
   </div>
