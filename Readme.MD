@@ -1,4 +1,4 @@
-# todolist App with svelte
+# todolist App using svelte
 Simple todolist app using svelte.
 
 ## Several types of applications
