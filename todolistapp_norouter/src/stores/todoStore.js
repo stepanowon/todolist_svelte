@@ -2,10 +2,10 @@ import { writable } from 'svelte/store';
 
 const state = writable({
     todolist : [
-        { no:1, todo:"React학습1", done:false },
-        { no:2, todo:"React학습2", done:false },
-        { no:3, todo:"React학습3", done:true },
-        { no:4, todo:"React학습4", done:false },
+        { no:1, todo:"Buy Laptop Computer", done:false },
+        { no:2, todo:"Study ES6", done:false },
+        { no:3, todo:"Study Vue 3", done:true },
+        { no:4, todo:"Study React", done:false },
     ]
 })
 

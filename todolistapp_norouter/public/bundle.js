@@ -436,12 +436,12 @@ var app = (function () {
     			input = element("input");
     			t0 = space();
     			span = element("span");
-    			span.textContent = "추가";
+    			span.textContent = "Add!!";
     			attr_dev(input, "id", "msg");
     			attr_dev(input, "type", "text");
     			attr_dev(input, "class", "form-control");
     			attr_dev(input, "name", "msg");
-    			attr_dev(input, "placeholder", "할일을 여기에 입력!");
+    			attr_dev(input, "placeholder", "Type Todo!!");
     			input.value = /*todo*/ ctx[0];
     			add_location(input, file, 21, 12, 314);
     			attr_dev(span, "class", "btn btn-primary input-group-addon");
@@ -567,7 +567,7 @@ var app = (function () {
 
     	const block = {
     		c: function create() {
-    			t = text("(완료)");
+    			t = text("(Done)");
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, t, anchor);
@@ -609,11 +609,11 @@ var app = (function () {
     			if (if_block) if_block.c();
     			t2 = space();
     			span1 = element("span");
-    			span1.textContent = "삭제";
+    			span1.textContent = "Delete";
     			attr_dev(span0, "class", span0_class_value = /*item*/ ctx[0].done ? "todo-done pointer" : "pointer");
     			add_location(span0, file$1, 18, 4, 354);
     			attr_dev(span1, "class", "pull-right badge pointer");
-    			add_location(span1, file$1, 25, 4, 544);
+    			add_location(span1, file$1, 25, 4, 546);
     			attr_dev(li, "class", /*itemClassName*/ ctx[1]);
     			add_location(li, file$1, 17, 0, 322);
 
@@ -1023,16 +1023,16 @@ var app = (function () {
     			t3 = space();
     			create_component(todolist.$$.fragment);
     			attr_dev(div0, "class", "title");
-    			add_location(div0, file$3, 10, 8, 215);
+    			add_location(div0, file$3, 10, 8, 225);
     			attr_dev(div1, "class", "well");
-    			add_location(div1, file$3, 9, 4, 188);
-    			add_location(br, file$3, 15, 12, 401);
+    			add_location(div1, file$3, 9, 4, 197);
+    			add_location(br, file$3, 15, 12, 416);
     			attr_dev(div2, "class", "panel-body");
-    			add_location(div2, file$3, 13, 8, 316);
+    			add_location(div2, file$3, 13, 8, 329);
     			attr_dev(div3, "class", "panel panel-borderless");
-    			add_location(div3, file$3, 12, 4, 271);
+    			add_location(div3, file$3, 12, 4, 283);
     			attr_dev(div4, "class", "container");
-    			add_location(div4, file$3, 8, 0, 160);
+    			add_location(div4, file$3, 8, 0, 168);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -1209,10 +1209,10 @@ var app = (function () {
 
     const state = writable({
         todolist : [
-            { no:1, todo:"React학습1", done:false },
-            { no:2, todo:"React학습2", done:false },
-            { no:3, todo:"React학습3", done:true },
-            { no:4, todo:"React학습4", done:false },
+            { no:1, todo:"Buy Laptop Computer", done:false },
+            { no:2, todo:"Study ES6", done:false },
+            { no:3, todo:"Study Vue 3", done:true },
+            { no:4, todo:"Study React", done:false },
         ]
     });
 

@@ -20,9 +20,9 @@ $: {
         on:click={toggleHandler}>
         {item.todo}
         {#if item.done}
-             (완료)
+             (Done)
         {/if}
     </span>
     <span class="pull-right badge pointer" 
-        on:click={deleteHandler}>삭제</span>
+        on:click={deleteHandler}>Delete</span>
 </li>

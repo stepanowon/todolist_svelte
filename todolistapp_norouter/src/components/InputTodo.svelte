@@ -20,8 +20,8 @@ const changeTodo = (e) => {
     <div class="col">
         <div class="input-group">
             <input id="msg" type="text" class="form-control" name="msg" 
-                placeholder="할일을 여기에 입력!" value={todo} on:change={changeTodo} />
-            <span class="btn btn-primary input-group-addon" on:click={addHandler}>추가</span>
+                placeholder="Type Todo!!" value={todo} on:change={changeTodo} />
+            <span class="btn btn-primary input-group-addon" on:click={addHandler}>Add!!</span>
         </div>
     </div>
 </div>
