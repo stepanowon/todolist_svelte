@@ -2,7 +2,7 @@
 Simple todolist app using svelte.
 
 ## Several types of applications
-* todolistapp_norouter
-    * todolist app
+* todolistapp
+    * simple todolist app
 * todolistapp_router
     * todolist app using svelte-routre-spa
