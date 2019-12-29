@@ -1,5 +1,6 @@
-# todolist_svelte
-todolist app with svelte
+# todolistapp_norouter
+todolist app with svelte 
+no router version
 
 ### 
 - cd todolist_svelte
