@@ -31,7 +31,7 @@ const cancelHandler = () => {
         <input id="no" type="text" class="form-control" name="no" disabled bind:value={todoitem.no}><br/>
         Todo : 
         <input id="todo" type="text" class="form-control" name="msg" 
-            placeholder="할일을 여기에 입력!" bind:value={todoitem.todo}><br/>
+            placeholder="type todo!!" bind:value={todoitem.todo}><br/>
         Description : 
         <textarea class="form-control" rows="3" bind:value={todoitem.desc}></textarea>
         Completed : <input type="checkbox" bind:checked={todoitem.done} />          
