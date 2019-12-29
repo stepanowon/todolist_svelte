@@ -1,9 +1,8 @@
-# todolist_svelte
-todolist app with svelte
+# todolistapp_router
+todolist app with router
 
-### 
-- cd todolist_svelte
-- npm install
-- npm run dev
-
+## Launching the app
+* cd todolistapp_router
+* npm install
+* npm run dev
 
