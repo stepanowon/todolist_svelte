@@ -2,15 +2,20 @@
 import { navigateTo } from 'svelte-router-spa'
 import { state, updateTodo } from '../stores/todoStore';
 
-let todoitem = { ...$state.todoitem };
+export let currentRoute;
+
+let todoitem = $state.todolist.find((item)=>item.no === parseInt(currentRoute.namedParams.no,10));
+console.log(todoitem)
+
+if (!todoitem)   navigateTo('/');
 
 const updateTodoHandler = () => {
-    updateTodo(todoitem);
-    navigateTo('/');
+  updateTodo(todoitem);
+  navigateTo('/');
 }
 
 const cancelHandler = () => {
-    navigateTo('/');
+  navigateTo('/')
 }
 </script>
 
@@ -19,15 +24,17 @@ const cancelHandler = () => {
     <div class="modal-content">
       <div class="modal-header">
         <button type="button" class="close" data-dismiss="modal" aria-label="Close" on:click={cancelHandler}><span aria-hidden="true">&times;</span></button>
-        <h4 class="modal-title">할일 편집, 수정</h4>
+        <h4 class="modal-title">Edit Todo --> Update</h4>
       </div>
       <div class="modal-body">
-        번호 : 
+        No : 
         <input id="no" type="text" class="form-control" name="no" disabled bind:value={todoitem.no}><br/>
-        할일 : 
+        Todo : 
         <input id="todo" type="text" class="form-control" name="msg" 
             placeholder="할일을 여기에 입력!" bind:value={todoitem.todo}><br/>
-        완료 여부 : <input type="checkbox" bind:value={todoitem.done} />          
+        Description : 
+        <textarea class="form-control" rows="3" bind:value={todoitem.desc}></textarea>
+        Completed : <input type="checkbox" bind:checked={todoitem.done} />          
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-default" on:click={updateTodoHandler}>수 정</button>

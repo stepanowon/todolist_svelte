@@ -1,12 +1,11 @@
 <script>
 import TodoItem from './TodoItem.svelte'
 import { navigateTo } from 'svelte-router-spa'
-import { state, initializeTodoItem, deleteTodo, toggleDone } from '../stores/todoStore'
+import { state, deleteTodo, toggleDone } from '../stores/todoStore'
 
-let callbacks = { deleteTodo, toggleDone, initializeTodoItem };
+let callbacks = { deleteTodo, toggleDone };
 
 let goAddTodo = () => {
-    initializeTodoItem()
     navigateTo('add')
 }
 </script>
@@ -21,7 +20,7 @@ let goAddTodo = () => {
             :: Todolist App
         </div>
     </div>
-    <button class="btn btn-primary" on:click={goAddTodo}>연락처 추가</button>
+    <button class="btn btn-primary" on:click={goAddTodo}>Add Todo</button>
     <div class="panel panel-default panel-borderless">
     <div class="panel-body">
         <div class="row">

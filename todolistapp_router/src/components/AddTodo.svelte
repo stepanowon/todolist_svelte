@@ -2,7 +2,7 @@
 import { navigateTo } from 'svelte-router-spa'
 import { state, addTodo } from '../stores/todoStore';
 
-let todoitem = { ...$state.todoitem };
+let todoitem = { no:"", todo:"", desc:"", done:false };
 
 const addTodoHandler = () => {
     addTodo(todoitem);
@@ -20,16 +20,18 @@ const cancelHandler = () => {
     <div class="modal-content">
       <div class="modal-header">
         <button type="button" class="close" data-dismiss="modal" aria-label="Close" on:click={cancelHandler}><span aria-hidden="true">&times;</span></button>
-        <h4 class="modal-title">할일 추가</h4>
+        <h4 class="modal-title">Add Todo!!</h4>
       </div>
       <div class="modal-body">
-        할일 : 
+        Todo : 
         <input id="msg" type="text" class="form-control" name="msg" 
-            placeholder="할일을 여기에 입력!" bind:value={todoitem.todo}><br/>
+            placeholder="type todo!!" bind:value={todoitem.todo}><br/>
+        Description : 
+        <textarea class="form-control" rows="3" bind:value={todoitem.desc}></textarea> 
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-default" on:click={addTodoHandler}>추 가</button>
-        <button type="button" class="btn btn-primary" data-dismiss="modal" on:click={cancelHandler}>취 소</button>
+        <button type="button" class="btn btn-default" on:click={addTodoHandler}>Add</button>
+        <button type="button" class="btn btn-primary" data-dismiss="modal" on:click={cancelHandler}>Cancel</button>
       </div>
     </div>
   </div>
