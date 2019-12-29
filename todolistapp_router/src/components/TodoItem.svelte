@@ -1,4 +1,6 @@
 <script>
+import { navigateTo } from 'svelte-router-spa'
+
 export let item, callbacks;
 
 const toggleHandler = () => {
@@ -7,6 +9,11 @@ const toggleHandler = () => {
 
 const deleteHandler = () => {
     callbacks.deleteTodo(item.no);
+}
+
+const editTodo = () => {
+    callbacks.initializeTodoItem(item);
+    navigateTo(`update/${item.no}`);
 }
 
 let itemClassName;
@@ -23,6 +30,6 @@ $: {
              (완료)
         {/if}
     </span>
-    <span class="pull-right badge pointer" 
-        on:click={deleteHandler}>삭제</span>
+    <span class="pull-right badge pointer" on:click={deleteHandler}>삭제</span>
+    <span class="pull-right badge pointer" on:click={editTodo}>편집</span>
 </li>

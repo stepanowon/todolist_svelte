@@ -1,6 +1,7 @@
 import { writable } from 'svelte/store';
 
 const state = writable({
+    todoitem: { no:"", todo:"", desc:"", done:false },
     todolist : [
         { no:1, todo:"React학습1", done:false },
         { no:2, todo:"React학습2", done:false },
@@ -9,10 +10,10 @@ const state = writable({
     ]
 })
 
-let addTodo = (todo) => { 
-    state.update((current)=> {
-        current.todolist.push({ no: new Date().getTime(), todo:todo, done:false })
-        return current;
+let addTodo = (todoitem) => { 
+    state.update((draft)=> {
+        draft.todolist.push({ ...todoitem, no: new Date().getTime() })
+        return draft;
     })
 }
 
@@ -32,5 +33,24 @@ let toggleDone = (no) => {
     })
 }
 
-export { state,  addTodo, deleteTodo, toggleDone };
+let updateTodo = (todoitem) => {
+    state.update((draft)=> {
+        let index = draft.todolist.findIndex((item)=> item.no === todoitem.no);
+        draft.todolist[index] = { ...todoitem };
+        return draft;
+    })
+}
+
+let initializeTodoItem = (todoitem) => {
+    state.update((draft)=> {
+        if (todoitem) {
+            draft.todoitem = { ...todoitem };
+        } else {
+            draft.todoitem = { no:"", todo:"", done:false };
+        } 
+        return draft;
+    })
+}
+
+export { state,  addTodo, updateTodo, deleteTodo, toggleDone, initializeTodoItem };
 

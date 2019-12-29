@@ -89,11 +89,6 @@ chalk@^2.0.0, chalk@^2.4.1:
     escape-string-regexp "^1.0.5"
     supports-color "^5.3.0"
 
-clsx@^1.0.4:
-  version "1.0.4"
-  resolved "https://registry.yarnpkg.com/clsx/-/clsx-1.0.4.tgz#0c0171f6d5cb2fe83848463c15fcc26b4df8c2ec"
-  integrity sha512-1mQ557MIZTrL/140j+JVdRM6e31/OA4vTYxXgqIIZlndyfjHpyawKZia1Im05Vp9BWmImkcNrNtFYQMyFcgJDg==
-
 color-convert@^1.9.0:
   version "1.9.3"
   resolved "https://registry.yarnpkg.com/color-convert/-/color-convert-1.9.3.tgz#bb71850690e1f136567de629d2d5471deda4c1e8"
@@ -224,11 +219,6 @@ hosted-git-info@^2.1.4:
   resolved "https://registry.yarnpkg.com/hosted-git-info/-/hosted-git-info-2.8.5.tgz#759cfcf2c4d156ade59b0b2dfabddc42a6b9c70c"
   integrity sha512-kssjab8CvdXfcXMXVcvsXum4Hwdq9XGtRD3TteMEvEbq0LXyiNQr6AprqKqfeaDXze7SxWvRxdpwE6ku7ikLkg==
 
-immer@^5.1.0:
-  version "5.1.0"
-  resolved "https://registry.yarnpkg.com/immer/-/immer-5.1.0.tgz#38d9eba40dbb0389b7ae7b8b99e4661df0cf89e3"
-  integrity sha512-t6gyFtTcokCuI0tX9KQZJQAkIjSqo/nTeJnwojfty69EzrorZbywwhZ8qNNlF+faajHeRnhOvM2F40KHLFCghQ==
-
 is-arrayish@^0.2.1:
   version "0.2.1"
   resolved "https://registry.yarnpkg.com/is-arrayish/-/is-arrayish-0.2.1.tgz#77c99840527aa8ecb1a8ba697b80645a7a926a9d"
@@ -305,16 +295,6 @@ local-access@^1.0.1:
   version "1.0.1"
   resolved "https://registry.yarnpkg.com/local-access/-/local-access-1.0.1.tgz#5121258146d64e869046c642ea4f1dd39ff942bb"
   integrity sha512-ykt2pgN0aqIy6KQC1CqdWTWkmUwNgaOS6dcpHVjyBJONA+Xi7AtSB1vuxC/U/0tjIP3wcRudwQk1YYzUvzk2bA==
-
-lodash.isobject@^3.0.2:
-  version "3.0.2"
-  resolved "https://registry.yarnpkg.com/lodash.isobject/-/lodash.isobject-3.0.2.tgz#3c8fb8d5b5bf4bf90ae06e14f2a530a4ed935e1d"
-  integrity sha1-PI+41bW/S/kK4G4U8qUwpO2TXh0=
-
-lodash.tonumber@^4.0.3:
-  version "4.0.3"
-  resolved "https://registry.yarnpkg.com/lodash.tonumber/-/lodash.tonumber-4.0.3.tgz#0b96b31b35672793eb7f5a63ee791f1b9e9025d9"
-  integrity sha1-C5azGzVnJ5Prf1pj7nkfG56QJdk=
 
 magic-string@^0.25.2:
   version "0.25.4"
@@ -660,19 +640,17 @@ supports-color@^6.1.0:
   dependencies:
     has-flag "^3.0.0"
 
+svelte-router-spa@^5.1.1:
+  version "5.1.1"
+  resolved "https://registry.yarnpkg.com/svelte-router-spa/-/svelte-router-spa-5.1.1.tgz#95e11d6a8100277c435e5a6e7e58b4ceb0554e6f"
+  integrity sha512-iv++c/2HpWyHwzbHn26tyeysXh79GW01NI8BbA7yqkj3/pgP1K/n5dCFzj0+pTDO8+R7AQp1G77z+dtrv3F3yw==
+  dependencies:
+    url-params-parser "^1.0.1"
+
 svelte@3.16.5:
   version "3.16.5"
   resolved "https://registry.yarnpkg.com/svelte/-/svelte-3.16.5.tgz#d7073efcbf73ce6b112a858e17c81123ce9ec472"
   integrity sha512-iYOhJc7iczaonycuKjPgmy1lthhBoDOQo5UVhgKJRd3XYRdnYPPb0LvvJ0t7jqu5+15S0msMm06WSOKUvhEZsw==
-
-sveltestrap@^3.2.9:
-  version "3.2.9"
-  resolved "https://registry.yarnpkg.com/sveltestrap/-/sveltestrap-3.2.9.tgz#ea0f6ea29ff55ff17da6348ce9fb1cabab672d23"
-  integrity sha512-3rNiqeT1mSXerbrxuNlLVffJjJWi976LjbqyrSw5f96Alf3pnmot6qj1EixRT2ek6MftYofVx6VXNqhsvdBAxw==
-  dependencies:
-    clsx "^1.0.4"
-    lodash.isobject "^3.0.2"
-    lodash.tonumber "^4.0.3"
 
 terser@^3.14.1:
   version "3.17.0"
@@ -687,6 +665,11 @@ tinydate@^1.0.0:
   version "1.2.0"
   resolved "https://registry.yarnpkg.com/tinydate/-/tinydate-1.2.0.tgz#36b4bb02715f89743f3ef9073d3573d005a28d0e"
   integrity sha512-3GwPk8VhDFnUZ2TrgkhXJs6hcMAIIw4x/xkz+ayK6dGoQmp2nUwKzBXK0WnMsqkh6vfUhpqQicQF3rbshfyJkg==
+
+url-params-parser@^1.0.1:
+  version "1.0.1"
+  resolved "https://registry.yarnpkg.com/url-params-parser/-/url-params-parser-1.0.1.tgz#0cf144f60a6ad51710fa21e30239025111991e96"
+  integrity sha512-S2IaWGBTKqVktOada1jt9K2zCDKfCE5YST5eWMnk/1tSHn0aRRFN6w+xKoWfy/seiEkz7udWpQJdemckJiIvwg==
 
 validate-npm-package-license@^3.0.1:
   version "3.0.4"
