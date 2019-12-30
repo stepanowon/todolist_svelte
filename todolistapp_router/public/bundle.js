@@ -1896,8 +1896,6 @@ var app = (function () {
     	let div2;
     	let div1;
     	let div0;
-    	let t1;
-    	let t2;
 
     	const block = {
     		c: function create() {
@@ -1905,8 +1903,6 @@ var app = (function () {
     			div1 = element("div");
     			div0 = element("div");
     			div0.textContent = "404 - Object Not Found";
-    			t1 = space();
-    			t2 = text("div>");
     			attr_dev(div0, "class", "title");
     			add_location(div0, file$4, 7, 8, 125);
     			attr_dev(div1, "class", "well");
@@ -1921,15 +1917,12 @@ var app = (function () {
     			insert_dev(target, div2, anchor);
     			append_dev(div2, div1);
     			append_dev(div1, div0);
-    			append_dev(div2, t1);
-    			insert_dev(target, t2, anchor);
     		},
     		p: noop,
     		i: noop,
     		o: noop,
     		d: function destroy(detaching) {
     			if (detaching) detach_dev(div2);
-    			if (detaching) detach_dev(t2);
     		}
     	};
 
