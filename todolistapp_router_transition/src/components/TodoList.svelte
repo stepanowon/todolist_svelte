@@ -2,6 +2,7 @@
 import TodoItem from './TodoItem.svelte'
 import { push } from 'svelte-spa-router'
 import { state, deleteTodo, toggleDone } from '../stores/todoStore'
+import { fade } from 'svelte/transition';
 
 let callbacks = { deleteTodo, toggleDone };
 
@@ -14,7 +15,7 @@ let goAddTodo = () => {
 
 </style>
 
-<div class="container">
+<div  in:fade="{{duration:300}}" class="container">
     <div class="well">
         <div class="title">
             :: Todolist App

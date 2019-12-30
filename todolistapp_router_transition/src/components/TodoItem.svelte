@@ -1,5 +1,6 @@
 <script>
 import {push} from 'svelte-spa-router'
+import { fade, fly } from 'svelte/transition';
 
 export let item, callbacks;
 
@@ -21,7 +22,7 @@ $: {
 }
 </script>
 
-<li class={itemClassName} title={'description : ' + item.desc}>
+<li in:fade="{{ duration: 300}}" out:fly="{{ x: 100, duration: 300 }}" class={itemClassName} title={'description : ' + item.desc}>
     <span class={item.done ? "todo-done pointer": "pointer"}
         on:click={toggleHandler}>
         {item.todo}

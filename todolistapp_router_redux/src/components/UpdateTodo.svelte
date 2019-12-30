@@ -1,23 +1,23 @@
 <script>
-import { navigateTo } from 'svelte-router-spa'
+import { push } from 'svelte-spa-router'
 import getTrackedState from '../redux/todoStore'
 import todoAction from '../redux/todoAction'
 
 const state = getTrackedState();
-let updateTodo = (todoitem) => state.dispatch(todoAction.addTodo(...todoitem));
+let updateTodo = (todoitem) => state.dispatch(todoAction.updateTodo({...todoitem}));
 
-export let currentRoute;
+export let params = {};
 
-let todoitem = $state.todolist.find((item)=>item.no === parseInt(currentRoute.namedParams.no,10));
+let todoitem = $state.todolist.find((item)=>item.no === parseInt(params.no,10));
 
-if (!todoitem)   navigateTo('/');
+if (!todoitem)   push('/');
 
 const updateTodoHandler = () => {
   updateTodo(todoitem);
-  navigateTo('/');
+  push('/');
 }
 
-const cancelHandler = () => navigateTo('/')
+const cancelHandler = () => push('/')
 
 </script>
 

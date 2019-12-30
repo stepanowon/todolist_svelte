@@ -1,16 +1,17 @@
 <script>
-import { navigateTo } from 'svelte-router-spa'
+import {push} from 'svelte-spa-router'
 import { state, addTodo } from '../stores/todoStore';
+import { fade } from 'svelte/transition';
 
 let todoitem = { no:"", todo:"", desc:"", done:false };
 
 const addTodoHandler = () => {
     addTodo(todoitem);
-    navigateTo('/');
+    push('/');
 }
 
 const cancelHandler = () => {
-    navigateTo('/');
+    push('/');
 }
 
 </script>

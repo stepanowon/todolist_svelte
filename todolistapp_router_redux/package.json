@@ -19,7 +19,7 @@
     "immer": "^5.1.0",
     "redux": "3.x.x",
     "svelte": "3.16.5",
-    "svelte-router-spa": "^5.1.1",
+    "svelte-spa-router": "^2.0.0",
     "svelte3-redux": "^0.2.4"
   },
   "scripts": {

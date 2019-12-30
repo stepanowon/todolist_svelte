@@ -1,6 +1,7 @@
 <script>
 import {push} from 'svelte-spa-router'
 import { state, updateTodo } from '../stores/todoStore';
+import { fade } from 'svelte/transition';
 
 export let params = {}
 
@@ -18,7 +19,7 @@ const cancelHandler = () => {
 }
 </script>
 
-<div class="centered-modal fade in" tabindex="0" role="dialog">
+<div  in:fade="{{duration: 500}}" class="centered-modal fade in" tabindex="0" role="dialog">
   <div class="modal-dialog modal-lg" role="document">
     <div class="modal-content">
       <div class="modal-header">

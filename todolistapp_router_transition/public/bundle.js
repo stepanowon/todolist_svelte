@@ -2,6 +2,7 @@ var app = (function () {
     'use strict';
 
     function noop() { }
+    const identity = x => x;
     function add_location(element, file, line, column, char) {
         element.__svelte_meta = {
             loc: { file, line, column, char }
@@ -33,6 +34,41 @@ var app = (function () {
     }
     function component_subscribe(component, store, callback) {
         component.$$.on_destroy.push(subscribe(store, callback));
+    }
+
+    const is_client = typeof window !== 'undefined';
+    let now = is_client
+        ? () => window.performance.now()
+        : () => Date.now();
+    let raf = is_client ? cb => requestAnimationFrame(cb) : noop;
+
+    const tasks = new Set();
+    function run_tasks(now) {
+        tasks.forEach(task => {
+            if (!task.c(now)) {
+                tasks.delete(task);
+                task.f();
+            }
+        });
+        if (tasks.size !== 0)
+            raf(run_tasks);
+    }
+    /**
+     * Creates a new task that runs on each raf frame
+     * until it returns a falsy value or is aborted
+     */
+    function loop(callback) {
+        let task;
+        if (tasks.size === 0)
+            raf(run_tasks);
+        return {
+            promise: new Promise(fulfill => {
+                tasks.add(task = { c: callback, f: fulfill });
+            }),
+            abort() {
+                tasks.delete(task);
+            }
+        };
     }
 
     function append(target, node) {
@@ -78,6 +114,62 @@ var app = (function () {
         const e = document.createEvent('CustomEvent');
         e.initCustomEvent(type, false, false, detail);
         return e;
+    }
+
+    let stylesheet;
+    let active = 0;
+    let current_rules = {};
+    // https://github.com/darkskyapp/string-hash/blob/master/index.js
+    function hash(str) {
+        let hash = 5381;
+        let i = str.length;
+        while (i--)
+            hash = ((hash << 5) - hash) ^ str.charCodeAt(i);
+        return hash >>> 0;
+    }
+    function create_rule(node, a, b, duration, delay, ease, fn, uid = 0) {
+        const step = 16.666 / duration;
+        let keyframes = '{\n';
+        for (let p = 0; p <= 1; p += step) {
+            const t = a + (b - a) * ease(p);
+            keyframes += p * 100 + `%{${fn(t, 1 - t)}}\n`;
+        }
+        const rule = keyframes + `100% {${fn(b, 1 - b)}}\n}`;
+        const name = `__svelte_${hash(rule)}_${uid}`;
+        if (!current_rules[name]) {
+            if (!stylesheet) {
+                const style = element('style');
+                document.head.appendChild(style);
+                stylesheet = style.sheet;
+            }
+            current_rules[name] = true;
+            stylesheet.insertRule(`@keyframes ${name} ${rule}`, stylesheet.cssRules.length);
+        }
+        const animation = node.style.animation || '';
+        node.style.animation = `${animation ? `${animation}, ` : ``}${name} ${duration}ms linear ${delay}ms 1 both`;
+        active += 1;
+        return name;
+    }
+    function delete_rule(node, name) {
+        node.style.animation = (node.style.animation || '')
+            .split(', ')
+            .filter(name
+            ? anim => anim.indexOf(name) < 0 // remove specific animation
+            : anim => anim.indexOf('__svelte') === -1 // remove all Svelte animations
+        )
+            .join(', ');
+        if (name && !--active)
+            clear_rules();
+    }
+    function clear_rules() {
+        raf(() => {
+            if (active)
+                return;
+            let i = stylesheet.cssRules.length;
+            while (i--)
+                stylesheet.deleteRule(i);
+            current_rules = {};
+        });
     }
 
     let current_component;
@@ -159,6 +251,20 @@ var app = (function () {
             $$.after_update.forEach(add_render_callback);
         }
     }
+
+    let promise;
+    function wait() {
+        if (!promise) {
+            promise = Promise.resolve();
+            promise.then(() => {
+                promise = null;
+            });
+        }
+        return promise;
+    }
+    function dispatch(node, direction, kind) {
+        node.dispatchEvent(custom_event(`${direction ? 'intro' : 'outro'}${kind}`));
+    }
     const outroing = new Set();
     let outros;
     function group_outros() {
@@ -195,6 +301,125 @@ var app = (function () {
             });
             block.o(local);
         }
+    }
+    const null_transition = { duration: 0 };
+    function create_in_transition(node, fn, params) {
+        let config = fn(node, params);
+        let running = false;
+        let animation_name;
+        let task;
+        let uid = 0;
+        function cleanup() {
+            if (animation_name)
+                delete_rule(node, animation_name);
+        }
+        function go() {
+            const { delay = 0, duration = 300, easing = identity, tick = noop, css } = config || null_transition;
+            if (css)
+                animation_name = create_rule(node, 0, 1, duration, delay, easing, css, uid++);
+            tick(0, 1);
+            const start_time = now() + delay;
+            const end_time = start_time + duration;
+            if (task)
+                task.abort();
+            running = true;
+            add_render_callback(() => dispatch(node, true, 'start'));
+            task = loop(now => {
+                if (running) {
+                    if (now >= end_time) {
+                        tick(1, 0);
+                        dispatch(node, true, 'end');
+                        cleanup();
+                        return running = false;
+                    }
+                    if (now >= start_time) {
+                        const t = easing((now - start_time) / duration);
+                        tick(t, 1 - t);
+                    }
+                }
+                return running;
+            });
+        }
+        let started = false;
+        return {
+            start() {
+                if (started)
+                    return;
+                delete_rule(node);
+                if (is_function(config)) {
+                    config = config();
+                    wait().then(go);
+                }
+                else {
+                    go();
+                }
+            },
+            invalidate() {
+                started = false;
+            },
+            end() {
+                if (running) {
+                    cleanup();
+                    running = false;
+                }
+            }
+        };
+    }
+    function create_out_transition(node, fn, params) {
+        let config = fn(node, params);
+        let running = true;
+        let animation_name;
+        const group = outros;
+        group.r += 1;
+        function go() {
+            const { delay = 0, duration = 300, easing = identity, tick = noop, css } = config || null_transition;
+            if (css)
+                animation_name = create_rule(node, 1, 0, duration, delay, easing, css);
+            const start_time = now() + delay;
+            const end_time = start_time + duration;
+            add_render_callback(() => dispatch(node, false, 'start'));
+            loop(now => {
+                if (running) {
+                    if (now >= end_time) {
+                        tick(0, 1);
+                        dispatch(node, false, 'end');
+                        if (!--group.r) {
+                            // this will result in `end()` being called,
+                            // so we don't need to clean up here
+                            run_all(group.c);
+                        }
+                        return false;
+                    }
+                    if (now >= start_time) {
+                        const t = easing((now - start_time) / duration);
+                        tick(1 - t, t);
+                    }
+                }
+                return running;
+            });
+        }
+        if (is_function(config)) {
+            wait().then(() => {
+                // @ts-ignore
+                config = config();
+                go();
+            });
+        }
+        else {
+            go();
+        }
+        return {
+            end(reset) {
+                if (reset && config.tick) {
+                    config.tick(1, 0);
+                }
+                if (running) {
+                    if (animation_name)
+                        delete_rule(node, animation_name);
+                    running = false;
+                }
+            }
+        };
     }
 
     const globals = (typeof window !== 'undefined' ? window : global);
@@ -944,6 +1169,35 @@ var app = (function () {
         });
     };
 
+    function cubicOut(t) {
+        const f = t - 1.0;
+        return f * f * f + 1.0;
+    }
+
+    function fade(node, { delay = 0, duration = 400, easing = identity }) {
+        const o = +getComputedStyle(node).opacity;
+        return {
+            delay,
+            duration,
+            easing,
+            css: t => `opacity: ${t * o}`
+        };
+    }
+    function fly(node, { delay = 0, duration = 400, easing = cubicOut, x = 0, y = 0, opacity = 0 }) {
+        const style = getComputedStyle(node);
+        const target_opacity = +style.opacity;
+        const transform = style.transform === 'none' ? '' : style.transform;
+        const od = target_opacity * (1 - opacity);
+        return {
+            delay,
+            duration,
+            easing,
+            css: (t, u) => `
+			transform: ${transform} translate(${(1 - t) * x}px, ${(1 - t) * y}px);
+			opacity: ${target_opacity - (od * u)}`
+        };
+    }
+
     /* src\components\AddTodo.svelte generated by Svelte v3.16.5 */
     const file = "src\\components\\AddTodo.svelte";
 
@@ -968,6 +1222,7 @@ var app = (function () {
     	let button1;
     	let t8;
     	let button2;
+    	let div5_intro;
     	let dispose;
 
     	const block = {
@@ -997,42 +1252,42 @@ var app = (function () {
     			button2 = element("button");
     			button2.textContent = "Cancel";
     			attr_dev(span, "aria-hidden", "true");
-    			add_location(span, file, 22, 109, 684);
+    			add_location(span, file, 22, 109, 713);
     			attr_dev(button0, "type", "button");
     			attr_dev(button0, "class", "close");
     			attr_dev(button0, "data-dismiss", "modal");
     			attr_dev(button0, "aria-label", "Close");
-    			add_location(button0, file, 22, 8, 583);
+    			add_location(button0, file, 22, 8, 612);
     			attr_dev(h4, "class", "modal-title");
-    			add_location(h4, file, 23, 8, 742);
+    			add_location(h4, file, 23, 8, 771);
     			attr_dev(div0, "class", "modal-header");
-    			add_location(div0, file, 21, 6, 547);
+    			add_location(div0, file, 21, 6, 576);
     			attr_dev(input, "id", "msg");
     			attr_dev(input, "type", "text");
     			attr_dev(input, "class", "form-control");
     			attr_dev(input, "name", "msg");
     			attr_dev(input, "placeholder", "Type todo here");
-    			add_location(input, file, 27, 8, 854);
-    			add_location(br, file, 28, 68, 984);
+    			add_location(input, file, 27, 8, 883);
+    			add_location(br, file, 28, 68, 1013);
     			attr_dev(textarea, "class", "form-control");
     			attr_dev(textarea, "rows", "3");
-    			add_location(textarea, file, 30, 8, 1023);
+    			add_location(textarea, file, 30, 8, 1052);
     			attr_dev(div1, "class", "modal-body");
-    			add_location(div1, file, 25, 6, 803);
+    			add_location(div1, file, 25, 6, 832);
     			attr_dev(button1, "type", "button");
     			attr_dev(button1, "class", "btn btn-default");
-    			add_location(button1, file, 33, 8, 1160);
+    			add_location(button1, file, 33, 8, 1189);
     			attr_dev(button2, "type", "button");
     			attr_dev(button2, "class", "btn btn-primary");
     			attr_dev(button2, "data-dismiss", "modal");
-    			add_location(button2, file, 34, 8, 1254);
+    			add_location(button2, file, 34, 8, 1283);
     			attr_dev(div2, "class", "modal-footer");
-    			add_location(div2, file, 32, 6, 1124);
+    			add_location(div2, file, 32, 6, 1153);
     			attr_dev(div3, "class", "modal-content");
-    			add_location(div3, file, 20, 4, 512);
+    			add_location(div3, file, 20, 4, 541);
     			attr_dev(div4, "class", "modal-dialog modal-lg");
     			attr_dev(div4, "role", "document");
-    			add_location(div4, file, 19, 2, 455);
+    			add_location(div4, file, 19, 2, 484);
     			attr_dev(div5, "class", "centered-modal fade in");
     			attr_dev(div5, "tabindex", "-1");
     			attr_dev(div5, "role", "dialog");
@@ -1083,7 +1338,14 @@ var app = (function () {
     				set_input_value(textarea, /*todoitem*/ ctx[0].desc);
     			}
     		},
-    		i: noop,
+    		i: function intro(local) {
+    			if (!div5_intro) {
+    				add_render_callback(() => {
+    					div5_intro = create_in_transition(div5, fade, { duration: 300 });
+    					div5_intro.start();
+    				});
+    			}
+    		},
     		o: noop,
     		d: function destroy(detaching) {
     			if (detaching) detach_dev(div5);
@@ -1184,6 +1446,7 @@ var app = (function () {
     	let button1;
     	let t10;
     	let button2;
+    	let div5_intro;
     	let dispose;
 
     	const block = {
@@ -1218,55 +1481,55 @@ var app = (function () {
     			button2 = element("button");
     			button2.textContent = "Cancel";
     			attr_dev(span, "aria-hidden", "true");
-    			add_location(span, file$1, 24, 109, 686);
+    			add_location(span, file$1, 25, 109, 758);
     			attr_dev(button0, "type", "button");
     			attr_dev(button0, "class", "close");
     			attr_dev(button0, "data-dismiss", "modal");
     			attr_dev(button0, "aria-label", "Close");
-    			add_location(button0, file$1, 24, 8, 585);
+    			add_location(button0, file$1, 25, 8, 657);
     			attr_dev(h4, "class", "modal-title");
-    			add_location(h4, file$1, 25, 8, 744);
+    			add_location(h4, file$1, 26, 8, 816);
     			attr_dev(div0, "class", "modal-header");
-    			add_location(div0, file$1, 23, 6, 549);
+    			add_location(div0, file$1, 24, 6, 621);
     			attr_dev(input0, "id", "no");
     			attr_dev(input0, "type", "text");
     			attr_dev(input0, "class", "form-control");
     			attr_dev(input0, "name", "no");
     			input0.disabled = true;
-    			add_location(input0, file$1, 29, 8, 855);
-    			add_location(br0, file$1, 29, 100, 947);
+    			add_location(input0, file$1, 30, 8, 927);
+    			add_location(br0, file$1, 30, 100, 1019);
     			attr_dev(input1, "id", "todo");
     			attr_dev(input1, "type", "text");
     			attr_dev(input1, "class", "form-control");
     			attr_dev(input1, "name", "msg");
     			attr_dev(input1, "placeholder", "Type todo here");
-    			add_location(input1, file$1, 31, 8, 979);
-    			add_location(br1, file$1, 32, 68, 1110);
+    			add_location(input1, file$1, 32, 8, 1051);
+    			add_location(br1, file$1, 33, 68, 1182);
     			attr_dev(textarea, "class", "form-control");
     			attr_dev(textarea, "rows", "3");
-    			add_location(textarea, file$1, 34, 8, 1149);
+    			add_location(textarea, file$1, 35, 8, 1221);
     			attr_dev(input2, "type", "checkbox");
-    			add_location(input2, file$1, 35, 15, 1244);
+    			add_location(input2, file$1, 36, 15, 1316);
     			attr_dev(div1, "class", "modal-body");
-    			add_location(div1, file$1, 27, 6, 806);
+    			add_location(div1, file$1, 28, 6, 878);
     			attr_dev(button1, "type", "button");
     			attr_dev(button1, "class", "btn btn-default");
-    			add_location(button1, file$1, 38, 8, 1366);
+    			add_location(button1, file$1, 39, 8, 1438);
     			attr_dev(button2, "type", "button");
     			attr_dev(button2, "class", "btn btn-primary");
     			attr_dev(button2, "data-dismiss", "modal");
-    			add_location(button2, file$1, 39, 8, 1466);
+    			add_location(button2, file$1, 40, 8, 1538);
     			attr_dev(div2, "class", "modal-footer");
-    			add_location(div2, file$1, 37, 6, 1330);
+    			add_location(div2, file$1, 38, 6, 1402);
     			attr_dev(div3, "class", "modal-content");
-    			add_location(div3, file$1, 22, 4, 514);
+    			add_location(div3, file$1, 23, 4, 586);
     			attr_dev(div4, "class", "modal-dialog modal-lg");
     			attr_dev(div4, "role", "document");
-    			add_location(div4, file$1, 21, 2, 457);
+    			add_location(div4, file$1, 22, 2, 529);
     			attr_dev(div5, "class", "centered-modal fade in");
     			attr_dev(div5, "tabindex", "0");
     			attr_dev(div5, "role", "dialog");
-    			add_location(div5, file$1, 20, 0, 390);
+    			add_location(div5, file$1, 21, 0, 433);
 
     			dispose = [
     				listen_dev(button0, "click", /*cancelHandler*/ ctx[2], false, false, false),
@@ -1329,7 +1592,14 @@ var app = (function () {
     				input2.checked = /*todoitem*/ ctx[0].done;
     			}
     		},
-    		i: noop,
+    		i: function intro(local) {
+    			if (!div5_intro) {
+    				add_render_callback(() => {
+    					div5_intro = create_in_transition(div5, fade, { duration: 500 });
+    					div5_intro.start();
+    				});
+    			}
+    		},
     		o: noop,
     		d: function destroy(detaching) {
     			if (detaching) detach_dev(div5);
@@ -1443,7 +1713,7 @@ var app = (function () {
     /* src\components\TodoItem.svelte generated by Svelte v3.16.5 */
     const file$2 = "src\\components\\TodoItem.svelte";
 
-    // (28:8) {#if item.done}
+    // (29:8) {#if item.done}
     function create_if_block(ctx) {
     	let t;
 
@@ -1463,7 +1733,7 @@ var app = (function () {
     		block,
     		id: create_if_block.name,
     		type: "if",
-    		source: "(28:8) {#if item.done}",
+    		source: "(29:8) {#if item.done}",
     		ctx
     	});
 
@@ -1482,6 +1752,9 @@ var app = (function () {
     	let t4;
     	let span2;
     	let li_title_value;
+    	let li_intro;
+    	let li_outro;
+    	let current;
     	let dispose;
     	let if_block = /*item*/ ctx[0].done && create_if_block(ctx);
 
@@ -1499,14 +1772,14 @@ var app = (function () {
     			span2 = element("span");
     			span2.textContent = "Edit";
     			attr_dev(span0, "class", span0_class_value = /*item*/ ctx[0].done ? "todo-done pointer" : "pointer");
-    			add_location(span0, file$2, 24, 4, 497);
+    			add_location(span0, file$2, 25, 4, 612);
     			attr_dev(span1, "class", "pull-right badge pointer");
-    			add_location(span1, file$2, 31, 4, 689);
+    			add_location(span1, file$2, 32, 4, 804);
     			attr_dev(span2, "class", "pull-right badge pointer");
-    			add_location(span2, file$2, 32, 4, 772);
+    			add_location(span2, file$2, 33, 4, 887);
     			attr_dev(li, "class", /*itemClassName*/ ctx[1]);
     			attr_dev(li, "title", li_title_value = "description : " + /*item*/ ctx[0].desc);
-    			add_location(li, file$2, 23, 0, 428);
+    			add_location(li, file$2, 24, 0, 476);
 
     			dispose = [
     				listen_dev(span0, "click", /*toggleHandler*/ ctx[2], false, false, false),
@@ -1527,9 +1800,10 @@ var app = (function () {
     			append_dev(li, span1);
     			append_dev(li, t4);
     			append_dev(li, span2);
+    			current = true;
     		},
     		p: function update(ctx, [dirty]) {
-    			if (dirty & /*item*/ 1 && t0_value !== (t0_value = /*item*/ ctx[0].todo + "")) set_data_dev(t0, t0_value);
+    			if ((!current || dirty & /*item*/ 1) && t0_value !== (t0_value = /*item*/ ctx[0].todo + "")) set_data_dev(t0, t0_value);
 
     			if (/*item*/ ctx[0].done) {
     				if (!if_block) {
@@ -1542,23 +1816,38 @@ var app = (function () {
     				if_block = null;
     			}
 
-    			if (dirty & /*item*/ 1 && span0_class_value !== (span0_class_value = /*item*/ ctx[0].done ? "todo-done pointer" : "pointer")) {
+    			if (!current || dirty & /*item*/ 1 && span0_class_value !== (span0_class_value = /*item*/ ctx[0].done ? "todo-done pointer" : "pointer")) {
     				attr_dev(span0, "class", span0_class_value);
     			}
 
-    			if (dirty & /*itemClassName*/ 2) {
+    			if (!current || dirty & /*itemClassName*/ 2) {
     				attr_dev(li, "class", /*itemClassName*/ ctx[1]);
     			}
 
-    			if (dirty & /*item*/ 1 && li_title_value !== (li_title_value = "description : " + /*item*/ ctx[0].desc)) {
+    			if (!current || dirty & /*item*/ 1 && li_title_value !== (li_title_value = "description : " + /*item*/ ctx[0].desc)) {
     				attr_dev(li, "title", li_title_value);
     			}
     		},
-    		i: noop,
-    		o: noop,
+    		i: function intro(local) {
+    			if (current) return;
+
+    			add_render_callback(() => {
+    				if (li_outro) li_outro.end(1);
+    				if (!li_intro) li_intro = create_in_transition(li, fade, { duration: 300 });
+    				li_intro.start();
+    			});
+
+    			current = true;
+    		},
+    		o: function outro(local) {
+    			if (li_intro) li_intro.invalidate();
+    			li_outro = create_out_transition(li, fly, { x: 100, duration: 300 });
+    			current = false;
+    		},
     		d: function destroy(detaching) {
     			if (detaching) detach_dev(li);
     			if (if_block) if_block.d();
+    			if (detaching && li_outro) li_outro.end();
     			run_all(dispose);
     		}
     	};
@@ -1674,7 +1963,7 @@ var app = (function () {
     	return child_ctx;
     }
 
-    // (27:8) {#each $state.todolist as item (item.no)}
+    // (28:8) {#each $state.todolist as item (item.no)}
     function create_each_block(key_1, ctx) {
     	let first;
     	let current;
@@ -1724,7 +2013,7 @@ var app = (function () {
     		block,
     		id: create_each_block.name,
     		type: "each",
-    		source: "(27:8) {#each $state.todolist as item (item.no)}",
+    		source: "(28:8) {#each $state.todolist as item (item.no)}",
     		ctx
     	});
 
@@ -1743,6 +2032,7 @@ var app = (function () {
     	let div2;
     	let each_blocks = [];
     	let each_1_lookup = new Map();
+    	let div5_intro;
     	let current;
     	let dispose;
     	let each_value = /*$state*/ ctx[0].todolist;
@@ -1773,19 +2063,19 @@ var app = (function () {
     			}
 
     			attr_dev(div0, "class", "title");
-    			add_location(div0, file$3, 18, 8, 351);
+    			add_location(div0, file$3, 19, 8, 422);
     			attr_dev(div1, "class", "well");
-    			add_location(div1, file$3, 17, 4, 323);
+    			add_location(div1, file$3, 18, 4, 394);
     			attr_dev(button, "class", "btn btn-primary");
-    			add_location(button, file$3, 22, 4, 433);
+    			add_location(button, file$3, 23, 4, 504);
     			attr_dev(div2, "class", "row");
-    			add_location(div2, file$3, 25, 8, 599);
+    			add_location(div2, file$3, 26, 8, 670);
     			attr_dev(div3, "class", "panel-body");
-    			add_location(div3, file$3, 24, 4, 565);
+    			add_location(div3, file$3, 25, 4, 636);
     			attr_dev(div4, "class", "panel panel-default panel-borderless");
-    			add_location(div4, file$3, 23, 4, 509);
+    			add_location(div4, file$3, 24, 4, 580);
     			attr_dev(div5, "class", "container");
-    			add_location(div5, file$3, 16, 0, 294);
+    			add_location(div5, file$3, 17, 0, 337);
     			dispose = listen_dev(button, "click", /*goAddTodo*/ ctx[2], false, false, false);
     		},
     		l: function claim(nodes) {
@@ -1819,6 +2109,13 @@ var app = (function () {
 
     			for (let i = 0; i < each_value.length; i += 1) {
     				transition_in(each_blocks[i]);
+    			}
+
+    			if (!div5_intro) {
+    				add_render_callback(() => {
+    					div5_intro = create_in_transition(div5, fade, { duration: 300 });
+    					div5_intro.start();
+    				});
     			}
 
     			current = true;
@@ -1897,6 +2194,7 @@ var app = (function () {
     	let div1;
     	let div0;
     	let t1;
+    	let div2_intro;
     	let t2;
 
     	const block = {
@@ -1908,9 +2206,9 @@ var app = (function () {
     			t1 = space();
     			t2 = text("div>");
     			attr_dev(div0, "class", "title");
-    			add_location(div0, file$4, 7, 8, 125);
+    			add_location(div0, file$4, 7, 8, 154);
     			attr_dev(div1, "class", "well");
-    			add_location(div1, file$4, 6, 4, 97);
+    			add_location(div1, file$4, 6, 4, 126);
     			attr_dev(div2, "class", "container");
     			add_location(div2, file$4, 5, 0, 68);
     		},
@@ -1925,7 +2223,14 @@ var app = (function () {
     			insert_dev(target, t2, anchor);
     		},
     		p: noop,
-    		i: noop,
+    		i: function intro(local) {
+    			if (!div2_intro) {
+    				add_render_callback(() => {
+    					div2_intro = create_in_transition(div2, fade, { duration: 500 });
+    					div2_intro.start();
+    				});
+    			}
+    		},
     		o: noop,
     		d: function destroy(detaching) {
     			if (detaching) detach_dev(div2);

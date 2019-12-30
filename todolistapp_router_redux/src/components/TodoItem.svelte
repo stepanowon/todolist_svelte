@@ -1,5 +1,5 @@
 <script>
-import { navigateTo } from 'svelte-router-spa'
+import { push } from 'svelte-spa-router'
 
 export let item, callbacks;
 
@@ -8,11 +8,12 @@ const toggleHandler = () => {
 }
 
 const deleteHandler = () => {
+    console.log(item.no)
     callbacks.deleteTodo(item.no);
 }
 
 const editTodo = () => {
-    navigateTo(`update/${item.no}`);
+    push(`/update/${item.no}`);
 }
 
 let itemClassName;

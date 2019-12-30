@@ -1,6 +1,6 @@
 <script>
 import TodoItem from './TodoItem.svelte'
-import { navigateTo } from 'svelte-router-spa'
+import { push } from 'svelte-spa-router'
 import getTrackedState from '../redux/todoStore'
 import todoAction from '../redux/todoAction'
 
@@ -12,7 +12,7 @@ let callbacks = {
 };
 
 let goAddTodo = () => {
-    navigateTo('add')
+    push('/add')
 }
 </script>
 

@@ -1,13 +1,9 @@
 <script>
-import { push } from 'svelte-spa-router'
-import getTrackedState from '../redux/todoStore'
-import todoAction from '../redux/todoAction'
+import {push} from 'svelte-spa-router'
+import { state, addTodo } from '../stores/todoStore';
+import { fade } from 'svelte/transition';
 
-const state = getTrackedState();
-
-let addTodo = (todoitem) => state.dispatch(todoAction.addTodo({...todoitem}));
-
-let todoitem = { todo:"", desc:"" };
+let todoitem = { no:"", todo:"", desc:"", done:false };
 
 const addTodoHandler = () => {
     addTodo(todoitem);
@@ -20,7 +16,7 @@ const cancelHandler = () => {
 
 </script>
 
-<div class="centered-modal fade in" tabindex="-1" role="dialog" aria-labelledby="myLargeModalLabel">
+<div  in:fade="{{duration: 300}}" class="centered-modal fade in" tabindex="-1" role="dialog" aria-labelledby="myLargeModalLabel">
   <div class="modal-dialog modal-lg" role="document">
     <div class="modal-content">
       <div class="modal-header">

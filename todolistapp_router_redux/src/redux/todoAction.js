@@ -1,7 +1,7 @@
 import Constant from '../Constant';
 
 const todoAction = {
-    addTodo(todo, desc) {
+    addTodo({todo, desc}) {
         return { type: Constant.ADD_TODO, payload: { todo, desc } }
     },
     deleteTodo(no) {
@@ -10,7 +10,7 @@ const todoAction = {
     toggleDone(no) {
         return { type: Constant.TOGGLE_DONE, payload : { no } }
     },
-    updateTodo(no, todo, desc, done) {
+    updateTodo({no, todo, desc, done}) {
         return { type: Constant.UPDATE_TODO, payload : { no, todo, desc, done } }
     }
 }
