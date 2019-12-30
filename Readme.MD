@@ -9,4 +9,6 @@ Simple todolist app using svelte.
 * todolistapp_router_redux
     * todolist app using svelte-router-spa, redux, redux devtools
     * you can debug using redux devtools
-    
+* todolistapp_router_transition
+    * todolistapp_router + transition version
+
