@@ -1,5 +1,4 @@
 <script>
-// import "bootstrap/dist/css/bootstrap.css";
 import App from "./components/App.svelte";
 import { state, addTodo, deleteTodo, toggleDone } from './stores/todoStore';
 
