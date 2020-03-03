@@ -2,6 +2,7 @@ var app = (function () {
     'use strict';
 
     function noop() { }
+    const identity = x => x;
     function add_location(element, file, line, column, char) {
         element.__svelte_meta = {
             loc: { file, line, column, char }
@@ -33,6 +34,41 @@ var app = (function () {
     }
     function component_subscribe(component, store, callback) {
         component.$$.on_destroy.push(subscribe(store, callback));
+    }
+
+    const is_client = typeof window !== 'undefined';
+    let now = is_client
+        ? () => window.performance.now()
+        : () => Date.now();
+    let raf = is_client ? cb => requestAnimationFrame(cb) : noop;
+
+    const tasks = new Set();
+    function run_tasks(now) {
+        tasks.forEach(task => {
+            if (!task.c(now)) {
+                tasks.delete(task);
+                task.f();
+            }
+        });
+        if (tasks.size !== 0)
+            raf(run_tasks);
+    }
+    /**
+     * Creates a new task that runs on each raf frame
+     * until it returns a falsy value or is aborted
+     */
+    function loop(callback) {
+        let task;
+        if (tasks.size === 0)
+            raf(run_tasks);
+        return {
+            promise: new Promise(fulfill => {
+                tasks.add(task = { c: callback, f: fulfill });
+            }),
+            abort() {
+                tasks.delete(task);
+            }
+        };
     }
 
     function append(target, node) {
@@ -78,6 +114,62 @@ var app = (function () {
         const e = document.createEvent('CustomEvent');
         e.initCustomEvent(type, false, false, detail);
         return e;
+    }
+
+    let stylesheet;
+    let active = 0;
+    let current_rules = {};
+    // https://github.com/darkskyapp/string-hash/blob/master/index.js
+    function hash(str) {
+        let hash = 5381;
+        let i = str.length;
+        while (i--)
+            hash = ((hash << 5) - hash) ^ str.charCodeAt(i);
+        return hash >>> 0;
+    }
+    function create_rule(node, a, b, duration, delay, ease, fn, uid = 0) {
+        const step = 16.666 / duration;
+        let keyframes = '{\n';
+        for (let p = 0; p <= 1; p += step) {
+            const t = a + (b - a) * ease(p);
+            keyframes += p * 100 + `%{${fn(t, 1 - t)}}\n`;
+        }
+        const rule = keyframes + `100% {${fn(b, 1 - b)}}\n}`;
+        const name = `__svelte_${hash(rule)}_${uid}`;
+        if (!current_rules[name]) {
+            if (!stylesheet) {
+                const style = element('style');
+                document.head.appendChild(style);
+                stylesheet = style.sheet;
+            }
+            current_rules[name] = true;
+            stylesheet.insertRule(`@keyframes ${name} ${rule}`, stylesheet.cssRules.length);
+        }
+        const animation = node.style.animation || '';
+        node.style.animation = `${animation ? `${animation}, ` : ``}${name} ${duration}ms linear ${delay}ms 1 both`;
+        active += 1;
+        return name;
+    }
+    function delete_rule(node, name) {
+        node.style.animation = (node.style.animation || '')
+            .split(', ')
+            .filter(name
+            ? anim => anim.indexOf(name) < 0 // remove specific animation
+            : anim => anim.indexOf('__svelte') === -1 // remove all Svelte animations
+        )
+            .join(', ');
+        if (name && !--active)
+            clear_rules();
+    }
+    function clear_rules() {
+        raf(() => {
+            if (active)
+                return;
+            let i = stylesheet.cssRules.length;
+            while (i--)
+                stylesheet.deleteRule(i);
+            current_rules = {};
+        });
     }
 
     let current_component;
@@ -159,6 +251,20 @@ var app = (function () {
             $$.after_update.forEach(add_render_callback);
         }
     }
+
+    let promise;
+    function wait() {
+        if (!promise) {
+            promise = Promise.resolve();
+            promise.then(() => {
+                promise = null;
+            });
+        }
+        return promise;
+    }
+    function dispatch(node, direction, kind) {
+        node.dispatchEvent(custom_event(`${direction ? 'intro' : 'outro'}${kind}`));
+    }
     const outroing = new Set();
     let outros;
     function group_outros() {
@@ -195,6 +301,125 @@ var app = (function () {
             });
             block.o(local);
         }
+    }
+    const null_transition = { duration: 0 };
+    function create_in_transition(node, fn, params) {
+        let config = fn(node, params);
+        let running = false;
+        let animation_name;
+        let task;
+        let uid = 0;
+        function cleanup() {
+            if (animation_name)
+                delete_rule(node, animation_name);
+        }
+        function go() {
+            const { delay = 0, duration = 300, easing = identity, tick = noop, css } = config || null_transition;
+            if (css)
+                animation_name = create_rule(node, 0, 1, duration, delay, easing, css, uid++);
+            tick(0, 1);
+            const start_time = now() + delay;
+            const end_time = start_time + duration;
+            if (task)
+                task.abort();
+            running = true;
+            add_render_callback(() => dispatch(node, true, 'start'));
+            task = loop(now => {
+                if (running) {
+                    if (now >= end_time) {
+                        tick(1, 0);
+                        dispatch(node, true, 'end');
+                        cleanup();
+                        return running = false;
+                    }
+                    if (now >= start_time) {
+                        const t = easing((now - start_time) / duration);
+                        tick(t, 1 - t);
+                    }
+                }
+                return running;
+            });
+        }
+        let started = false;
+        return {
+            start() {
+                if (started)
+                    return;
+                delete_rule(node);
+                if (is_function(config)) {
+                    config = config();
+                    wait().then(go);
+                }
+                else {
+                    go();
+                }
+            },
+            invalidate() {
+                started = false;
+            },
+            end() {
+                if (running) {
+                    cleanup();
+                    running = false;
+                }
+            }
+        };
+    }
+    function create_out_transition(node, fn, params) {
+        let config = fn(node, params);
+        let running = true;
+        let animation_name;
+        const group = outros;
+        group.r += 1;
+        function go() {
+            const { delay = 0, duration = 300, easing = identity, tick = noop, css } = config || null_transition;
+            if (css)
+                animation_name = create_rule(node, 1, 0, duration, delay, easing, css);
+            const start_time = now() + delay;
+            const end_time = start_time + duration;
+            add_render_callback(() => dispatch(node, false, 'start'));
+            loop(now => {
+                if (running) {
+                    if (now >= end_time) {
+                        tick(0, 1);
+                        dispatch(node, false, 'end');
+                        if (!--group.r) {
+                            // this will result in `end()` being called,
+                            // so we don't need to clean up here
+                            run_all(group.c);
+                        }
+                        return false;
+                    }
+                    if (now >= start_time) {
+                        const t = easing((now - start_time) / duration);
+                        tick(1 - t, t);
+                    }
+                }
+                return running;
+            });
+        }
+        if (is_function(config)) {
+            wait().then(() => {
+                // @ts-ignore
+                config = config();
+                go();
+            });
+        }
+        else {
+            go();
+        }
+        return {
+            end(reset) {
+                if (reset && config.tick) {
+                    config.tick(1, 0);
+                }
+                if (running) {
+                    if (animation_name)
+                        delete_rule(node, animation_name);
+                    running = false;
+                }
+            }
+        };
     }
 
     const globals = (typeof window !== 'undefined' ? window : global);
@@ -904,45 +1129,94 @@ var app = (function () {
     	}
     }
 
-    const state = writable({
-        todolist : [
-            { no:1, todo:"Buy Laptop Computer", desc:"Macbook 16 inch(A-shop)" , done:false },
-            { no:2, todo:"Study ES6", desc:"especially about Spread Operator and Arrow Function", done:false },
-            { no:3, todo:"Study Vue 3", desc:"about Composition API, Vuex and Vue-router", done:true },
-            { no:4, todo:"Study React", desc:"about Hook, Redux and Context API", done:false },
-        ]
+    const todoStore = writable({
+      todolist: [
+        {
+          no: 1,
+          todo: "Buy Laptop Computer",
+          desc: "Macbook 16 inch(A-shop)",
+          done: false
+        },
+        {
+          no: 2,
+          todo: "Study ES6",
+          desc: "especially about Spread Operator and Arrow Function",
+          done: false
+        },
+        {
+          no: 3,
+          todo: "Study Vue 3",
+          desc: "about Composition API, Vuex and Vue-router",
+          done: true
+        },
+        {
+          no: 4,
+          todo: "Study React",
+          desc: "about Hook, Redux and Context API",
+          done: false
+        }
+      ]
     });
 
-    let addTodo = (todoitem) => { 
-        state.update((draft)=> {
-            draft.todolist.push({ ...todoitem, no: new Date().getTime() });
-            return draft;
-        });
+    let addTodo = todoitem => {
+      todoStore.update(draft => {
+        draft.todolist.push({ ...todoitem, no: new Date().getTime() });
+        return draft;
+      });
     };
 
-    let deleteTodo = (no) => {
-        state.update((draft)=> {
-            let index = draft.todolist.findIndex((item)=>item.no===no);
-            draft.todolist.splice(index,1);
-            return draft;
-        });
+    let deleteTodo = no => {
+      todoStore.update(draft => {
+        let index = draft.todolist.findIndex(item => item.no === no);
+        draft.todolist.splice(index, 1);
+        return draft;
+      });
     };
 
-    let toggleDone = (no) => {
-        state.update((draft)=> {
-            let index = draft.todolist.findIndex((item)=>item.no===no);
-            draft.todolist[index].done = !draft.todolist[index].done;
-            return draft;
-        });
+    let toggleDone = no => {
+      todoStore.update(draft => {
+        let index = draft.todolist.findIndex(item => item.no === no);
+        draft.todolist[index].done = !draft.todolist[index].done;
+        return draft;
+      });
     };
 
-    let updateTodo = (todoitem) => {
-        state.update((draft)=> {
-            let index = draft.todolist.findIndex((item)=> item.no === todoitem.no);
-            draft.todolist[index] = { ...todoitem };
-            return draft;
-        });
+    let updateTodo = todoitem => {
+      todoStore.update(draft => {
+        let index = draft.todolist.findIndex(item => item.no === todoitem.no);
+        draft.todolist[index] = { ...todoitem };
+        return draft;
+      });
     };
+
+    function cubicOut(t) {
+        const f = t - 1.0;
+        return f * f * f + 1.0;
+    }
+
+    function fade(node, { delay = 0, duration = 400, easing = identity }) {
+        const o = +getComputedStyle(node).opacity;
+        return {
+            delay,
+            duration,
+            easing,
+            css: t => `opacity: ${t * o}`
+        };
+    }
+    function fly(node, { delay = 0, duration = 400, easing = cubicOut, x = 0, y = 0, opacity = 0 }) {
+        const style = getComputedStyle(node);
+        const target_opacity = +style.opacity;
+        const transform = style.transform === 'none' ? '' : style.transform;
+        const od = target_opacity * (1 - opacity);
+        return {
+            delay,
+            duration,
+            easing,
+            css: (t, u) => `
+			transform: ${transform} translate(${(1 - t) * x}px, ${(1 - t) * y}px);
+			opacity: ${target_opacity - (od * u)}`
+        };
+    }
 
     /* src\components\AddTodo.svelte generated by Svelte v3.16.5 */
     const file = "src\\components\\AddTodo.svelte";
@@ -968,6 +1242,7 @@ var app = (function () {
     	let button1;
     	let t8;
     	let button2;
+    	let div5_intro;
     	let dispose;
 
     	const block = {
@@ -997,47 +1272,47 @@ var app = (function () {
     			button2 = element("button");
     			button2.textContent = "Cancel";
     			attr_dev(span, "aria-hidden", "true");
-    			add_location(span, file, 22, 109, 684);
+    			add_location(span, file, 21, 109, 762);
     			attr_dev(button0, "type", "button");
     			attr_dev(button0, "class", "close");
     			attr_dev(button0, "data-dismiss", "modal");
     			attr_dev(button0, "aria-label", "Close");
-    			add_location(button0, file, 22, 8, 583);
+    			add_location(button0, file, 21, 8, 661);
     			attr_dev(h4, "class", "modal-title");
-    			add_location(h4, file, 23, 8, 742);
+    			add_location(h4, file, 22, 8, 820);
     			attr_dev(div0, "class", "modal-header");
-    			add_location(div0, file, 21, 6, 547);
+    			add_location(div0, file, 20, 6, 625);
     			attr_dev(input, "id", "msg");
     			attr_dev(input, "type", "text");
     			attr_dev(input, "class", "form-control");
     			attr_dev(input, "name", "msg");
     			attr_dev(input, "placeholder", "Type todo here");
-    			add_location(input, file, 27, 8, 854);
-    			add_location(br, file, 28, 68, 984);
+    			add_location(input, file, 26, 8, 932);
+    			add_location(br, file, 27, 68, 1062);
     			attr_dev(textarea, "class", "form-control");
     			attr_dev(textarea, "rows", "3");
-    			add_location(textarea, file, 30, 8, 1023);
+    			add_location(textarea, file, 29, 8, 1101);
     			attr_dev(div1, "class", "modal-body");
-    			add_location(div1, file, 25, 6, 803);
+    			add_location(div1, file, 24, 6, 881);
     			attr_dev(button1, "type", "button");
     			attr_dev(button1, "class", "btn btn-default");
-    			add_location(button1, file, 33, 8, 1160);
+    			add_location(button1, file, 32, 8, 1238);
     			attr_dev(button2, "type", "button");
     			attr_dev(button2, "class", "btn btn-primary");
     			attr_dev(button2, "data-dismiss", "modal");
-    			add_location(button2, file, 34, 8, 1254);
+    			add_location(button2, file, 33, 8, 1332);
     			attr_dev(div2, "class", "modal-footer");
-    			add_location(div2, file, 32, 6, 1124);
+    			add_location(div2, file, 31, 6, 1202);
     			attr_dev(div3, "class", "modal-content");
-    			add_location(div3, file, 20, 4, 512);
+    			add_location(div3, file, 19, 4, 590);
     			attr_dev(div4, "class", "modal-dialog modal-lg");
     			attr_dev(div4, "role", "document");
-    			add_location(div4, file, 19, 2, 455);
+    			add_location(div4, file, 18, 2, 533);
     			attr_dev(div5, "class", "centered-modal fade in");
     			attr_dev(div5, "tabindex", "-1");
     			attr_dev(div5, "role", "dialog");
     			attr_dev(div5, "aria-labelledby", "myLargeModalLabel");
-    			add_location(div5, file, 18, 0, 351);
+    			add_location(div5, file, 17, 0, 400);
 
     			dispose = [
     				listen_dev(button0, "click", /*cancelHandler*/ ctx[2], false, false, false),
@@ -1083,7 +1358,14 @@ var app = (function () {
     				set_input_value(textarea, /*todoitem*/ ctx[0].desc);
     			}
     		},
-    		i: noop,
+    		i: function intro(local) {
+    			if (!div5_intro) {
+    				add_render_callback(() => {
+    					div5_intro = create_in_transition(div5, fade, { duration: 300 });
+    					div5_intro.start();
+    				});
+    			}
+    		},
     		o: noop,
     		d: function destroy(detaching) {
     			if (detaching) detach_dev(div5);
@@ -1184,6 +1466,7 @@ var app = (function () {
     	let button1;
     	let t10;
     	let button2;
+    	let div5_intro;
     	let dispose;
 
     	const block = {
@@ -1218,55 +1501,55 @@ var app = (function () {
     			button2 = element("button");
     			button2.textContent = "Cancel";
     			attr_dev(span, "aria-hidden", "true");
-    			add_location(span, file$1, 24, 109, 686);
+    			add_location(span, file$1, 27, 109, 808);
     			attr_dev(button0, "type", "button");
     			attr_dev(button0, "class", "close");
     			attr_dev(button0, "data-dismiss", "modal");
     			attr_dev(button0, "aria-label", "Close");
-    			add_location(button0, file$1, 24, 8, 585);
+    			add_location(button0, file$1, 27, 8, 707);
     			attr_dev(h4, "class", "modal-title");
-    			add_location(h4, file$1, 25, 8, 744);
+    			add_location(h4, file$1, 28, 8, 866);
     			attr_dev(div0, "class", "modal-header");
-    			add_location(div0, file$1, 23, 6, 549);
+    			add_location(div0, file$1, 26, 6, 671);
     			attr_dev(input0, "id", "no");
     			attr_dev(input0, "type", "text");
     			attr_dev(input0, "class", "form-control");
     			attr_dev(input0, "name", "no");
     			input0.disabled = true;
-    			add_location(input0, file$1, 29, 8, 855);
-    			add_location(br0, file$1, 29, 100, 947);
+    			add_location(input0, file$1, 32, 8, 977);
+    			add_location(br0, file$1, 32, 100, 1069);
     			attr_dev(input1, "id", "todo");
     			attr_dev(input1, "type", "text");
     			attr_dev(input1, "class", "form-control");
     			attr_dev(input1, "name", "msg");
     			attr_dev(input1, "placeholder", "Type todo here");
-    			add_location(input1, file$1, 31, 8, 979);
-    			add_location(br1, file$1, 32, 68, 1110);
+    			add_location(input1, file$1, 34, 8, 1101);
+    			add_location(br1, file$1, 35, 68, 1232);
     			attr_dev(textarea, "class", "form-control");
     			attr_dev(textarea, "rows", "3");
-    			add_location(textarea, file$1, 34, 8, 1149);
+    			add_location(textarea, file$1, 37, 8, 1271);
     			attr_dev(input2, "type", "checkbox");
-    			add_location(input2, file$1, 35, 15, 1244);
+    			add_location(input2, file$1, 38, 15, 1366);
     			attr_dev(div1, "class", "modal-body");
-    			add_location(div1, file$1, 27, 6, 806);
+    			add_location(div1, file$1, 30, 6, 928);
     			attr_dev(button1, "type", "button");
     			attr_dev(button1, "class", "btn btn-default");
-    			add_location(button1, file$1, 38, 8, 1366);
+    			add_location(button1, file$1, 41, 8, 1488);
     			attr_dev(button2, "type", "button");
     			attr_dev(button2, "class", "btn btn-primary");
     			attr_dev(button2, "data-dismiss", "modal");
-    			add_location(button2, file$1, 39, 8, 1466);
+    			add_location(button2, file$1, 42, 8, 1588);
     			attr_dev(div2, "class", "modal-footer");
-    			add_location(div2, file$1, 37, 6, 1330);
+    			add_location(div2, file$1, 40, 6, 1452);
     			attr_dev(div3, "class", "modal-content");
-    			add_location(div3, file$1, 22, 4, 514);
+    			add_location(div3, file$1, 25, 4, 636);
     			attr_dev(div4, "class", "modal-dialog modal-lg");
     			attr_dev(div4, "role", "document");
-    			add_location(div4, file$1, 21, 2, 457);
+    			add_location(div4, file$1, 24, 2, 579);
     			attr_dev(div5, "class", "centered-modal fade in");
     			attr_dev(div5, "tabindex", "0");
     			attr_dev(div5, "role", "dialog");
-    			add_location(div5, file$1, 20, 0, 390);
+    			add_location(div5, file$1, 23, 0, 483);
 
     			dispose = [
     				listen_dev(button0, "click", /*cancelHandler*/ ctx[2], false, false, false),
@@ -1329,7 +1612,14 @@ var app = (function () {
     				input2.checked = /*todoitem*/ ctx[0].done;
     			}
     		},
-    		i: noop,
+    		i: function intro(local) {
+    			if (!div5_intro) {
+    				add_render_callback(() => {
+    					div5_intro = create_in_transition(div5, fade, { duration: 500 });
+    					div5_intro.start();
+    				});
+    			}
+    		},
     		o: noop,
     		d: function destroy(detaching) {
     			if (detaching) detach_dev(div5);
@@ -1349,11 +1639,11 @@ var app = (function () {
     }
 
     function instance$2($$self, $$props, $$invalidate) {
-    	let $state;
-    	validate_store(state, "state");
-    	component_subscribe($$self, state, $$value => $$invalidate(4, $state = $$value));
+    	let $todoStore;
+    	validate_store(todoStore, "todoStore");
+    	component_subscribe($$self, todoStore, $$value => $$invalidate(4, $todoStore = $$value));
     	let { params = {} } = $$props;
-    	let todoitem = $state.todolist.find(item => item.no === parseInt(params.no, 10));
+    	let todoitem = $todoStore.todolist.find(item => item.no === parseInt(params.no, 10));
     	if (!todoitem) push("/");
 
     	const updateTodoHandler = () => {
@@ -1396,13 +1686,13 @@ var app = (function () {
     	};
 
     	$$self.$capture_state = () => {
-    		return { params, todoitem, $state };
+    		return { params, todoitem, $todoStore };
     	};
 
     	$$self.$inject_state = $$props => {
     		if ("params" in $$props) $$invalidate(3, params = $$props.params);
     		if ("todoitem" in $$props) $$invalidate(0, todoitem = $$props.todoitem);
-    		if ("$state" in $$props) state.set($state = $$props.$state);
+    		if ("$todoStore" in $$props) todoStore.set($todoStore = $$props.$todoStore);
     	};
 
     	return [
@@ -1410,7 +1700,7 @@ var app = (function () {
     		updateTodoHandler,
     		cancelHandler,
     		params,
-    		$state,
+    		$todoStore,
     		input0_input_handler,
     		input1_input_handler,
     		textarea_input_handler,
@@ -1443,13 +1733,13 @@ var app = (function () {
     /* src\components\TodoItem.svelte generated by Svelte v3.16.5 */
     const file$2 = "src\\components\\TodoItem.svelte";
 
-    // (28:8) {#if item.done}
+    // (31:8) {#if item.done}
     function create_if_block(ctx) {
     	let t;
 
     	const block = {
     		c: function create() {
-    			t = text("(Done)");
+    			t = text("(Completed)");
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, t, anchor);
@@ -1463,7 +1753,7 @@ var app = (function () {
     		block,
     		id: create_if_block.name,
     		type: "if",
-    		source: "(28:8) {#if item.done}",
+    		source: "(31:8) {#if item.done}",
     		ctx
     	});
 
@@ -1482,6 +1772,9 @@ var app = (function () {
     	let t4;
     	let span2;
     	let li_title_value;
+    	let li_intro;
+    	let li_outro;
+    	let current;
     	let dispose;
     	let if_block = /*item*/ ctx[0].done && create_if_block(ctx);
 
@@ -1499,14 +1792,14 @@ var app = (function () {
     			span2 = element("span");
     			span2.textContent = "Edit";
     			attr_dev(span0, "class", span0_class_value = /*item*/ ctx[0].done ? "todo-done pointer" : "pointer");
-    			add_location(span0, file$2, 24, 4, 497);
+    			add_location(span0, file$2, 27, 4, 693);
     			attr_dev(span1, "class", "pull-right badge pointer");
-    			add_location(span1, file$2, 31, 4, 689);
+    			add_location(span1, file$2, 34, 4, 890);
     			attr_dev(span2, "class", "pull-right badge pointer");
-    			add_location(span2, file$2, 32, 4, 772);
+    			add_location(span2, file$2, 35, 4, 973);
     			attr_dev(li, "class", /*itemClassName*/ ctx[1]);
     			attr_dev(li, "title", li_title_value = "description : " + /*item*/ ctx[0].desc);
-    			add_location(li, file$2, 23, 0, 428);
+    			add_location(li, file$2, 26, 0, 557);
 
     			dispose = [
     				listen_dev(span0, "click", /*toggleHandler*/ ctx[2], false, false, false),
@@ -1527,9 +1820,10 @@ var app = (function () {
     			append_dev(li, span1);
     			append_dev(li, t4);
     			append_dev(li, span2);
+    			current = true;
     		},
     		p: function update(ctx, [dirty]) {
-    			if (dirty & /*item*/ 1 && t0_value !== (t0_value = /*item*/ ctx[0].todo + "")) set_data_dev(t0, t0_value);
+    			if ((!current || dirty & /*item*/ 1) && t0_value !== (t0_value = /*item*/ ctx[0].todo + "")) set_data_dev(t0, t0_value);
 
     			if (/*item*/ ctx[0].done) {
     				if (!if_block) {
@@ -1542,23 +1836,38 @@ var app = (function () {
     				if_block = null;
     			}
 
-    			if (dirty & /*item*/ 1 && span0_class_value !== (span0_class_value = /*item*/ ctx[0].done ? "todo-done pointer" : "pointer")) {
+    			if (!current || dirty & /*item*/ 1 && span0_class_value !== (span0_class_value = /*item*/ ctx[0].done ? "todo-done pointer" : "pointer")) {
     				attr_dev(span0, "class", span0_class_value);
     			}
 
-    			if (dirty & /*itemClassName*/ 2) {
+    			if (!current || dirty & /*itemClassName*/ 2) {
     				attr_dev(li, "class", /*itemClassName*/ ctx[1]);
     			}
 
-    			if (dirty & /*item*/ 1 && li_title_value !== (li_title_value = "description : " + /*item*/ ctx[0].desc)) {
+    			if (!current || dirty & /*item*/ 1 && li_title_value !== (li_title_value = "description : " + /*item*/ ctx[0].desc)) {
     				attr_dev(li, "title", li_title_value);
     			}
     		},
-    		i: noop,
-    		o: noop,
+    		i: function intro(local) {
+    			if (current) return;
+
+    			add_render_callback(() => {
+    				if (li_outro) li_outro.end(1);
+    				if (!li_intro) li_intro = create_in_transition(li, fade, { duration: 300 });
+    				li_intro.start();
+    			});
+
+    			current = true;
+    		},
+    		o: function outro(local) {
+    			if (li_intro) li_intro.invalidate();
+    			li_outro = create_out_transition(li, fly, { x: 100, duration: 300 });
+    			current = false;
+    		},
     		d: function destroy(detaching) {
     			if (detaching) detach_dev(li);
     			if (if_block) if_block.d();
+    			if (detaching && li_outro) li_outro.end();
     			run_all(dispose);
     		}
     	};
@@ -1665,8 +1974,91 @@ var app = (function () {
     	}
     }
 
+    /* src\components\TodoCount.svelte generated by Svelte v3.16.5 */
+    const file$3 = "src\\components\\TodoCount.svelte";
+
+    function create_fragment$4(ctx) {
+    	let div1;
+    	let div0;
+    	let t0;
+    	let t1;
+
+    	const block = {
+    		c: function create() {
+    			div1 = element("div");
+    			div0 = element("div");
+    			t0 = text("Completed Todos Count : ");
+    			t1 = text(/*completedTodoCount*/ ctx[0]);
+    			attr_dev(div0, "class", "row");
+    			add_location(div0, file$3, 11, 1, 343);
+    			attr_dev(div1, "class", "panel-body");
+    			add_location(div1, file$3, 10, 0, 316);
+    		},
+    		l: function claim(nodes) {
+    			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, div1, anchor);
+    			append_dev(div1, div0);
+    			append_dev(div0, t0);
+    			append_dev(div0, t1);
+    		},
+    		p: function update(ctx, [dirty]) {
+    			if (dirty & /*completedTodoCount*/ 1) set_data_dev(t1, /*completedTodoCount*/ ctx[0]);
+    		},
+    		i: noop,
+    		o: noop,
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(div1);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_fragment$4.name,
+    		type: "component",
+    		source: "",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    function instance$4($$self, $$props, $$invalidate) {
+    	let completedTodoCount;
+
+    	const unsubscribe = todoStore.subscribe(value => {
+    		let completedTodoList = value.todolist.filter(item => item.done === true);
+    		$$invalidate(0, completedTodoCount = completedTodoList.length);
+    	});
+
+    	$$self.$capture_state = () => {
+    		return {};
+    	};
+
+    	$$self.$inject_state = $$props => {
+    		if ("completedTodoCount" in $$props) $$invalidate(0, completedTodoCount = $$props.completedTodoCount);
+    	};
+
+    	return [completedTodoCount];
+    }
+
+    class TodoCount extends SvelteComponentDev {
+    	constructor(options) {
+    		super(options);
+    		init(this, options, instance$4, create_fragment$4, safe_not_equal, {});
+
+    		dispatch_dev("SvelteRegisterComponent", {
+    			component: this,
+    			tagName: "TodoCount",
+    			options,
+    			id: create_fragment$4.name
+    		});
+    	}
+    }
+
     /* src\components\TodoList.svelte generated by Svelte v3.16.5 */
-    const file$3 = "src\\components\\TodoList.svelte";
+    const file$4 = "src\\components\\TodoList.svelte";
 
     function get_each_context(ctx, list, i) {
     	const child_ctx = ctx.slice();
@@ -1674,7 +2066,7 @@ var app = (function () {
     	return child_ctx;
     }
 
-    // (27:8) {#each $state.todolist as item (item.no)}
+    // (28:8) {#each $todoStore.todolist as item (item.no)}
     function create_each_block(key_1, ctx) {
     	let first;
     	let current;
@@ -1702,7 +2094,7 @@ var app = (function () {
     		},
     		p: function update(ctx, dirty) {
     			const todoitem_changes = {};
-    			if (dirty & /*$state*/ 1) todoitem_changes.item = /*item*/ ctx[3];
+    			if (dirty & /*$todoStore*/ 1) todoitem_changes.item = /*item*/ ctx[3];
     			todoitem.$set(todoitem_changes);
     		},
     		i: function intro(local) {
@@ -1724,28 +2116,31 @@ var app = (function () {
     		block,
     		id: create_each_block.name,
     		type: "each",
-    		source: "(27:8) {#each $state.todolist as item (item.no)}",
+    		source: "(28:8) {#each $todoStore.todolist as item (item.no)}",
     		ctx
     	});
 
     	return block;
     }
 
-    function create_fragment$4(ctx) {
-    	let div5;
+    function create_fragment$5(ctx) {
+    	let div6;
+    	let div2;
     	let div1;
     	let div0;
     	let t1;
     	let button;
     	let t3;
+    	let div5;
     	let div4;
     	let div3;
-    	let div2;
     	let each_blocks = [];
     	let each_1_lookup = new Map();
+    	let t4;
+    	let div6_intro;
     	let current;
     	let dispose;
-    	let each_value = /*$state*/ ctx[0].todolist;
+    	let each_value = /*$todoStore*/ ctx[0].todolist;
     	const get_key = ctx => /*item*/ ctx[3].no;
 
     	for (let i = 0; i < each_value.length; i += 1) {
@@ -1754,9 +2149,12 @@ var app = (function () {
     		each_1_lookup.set(key, each_blocks[i] = create_each_block(key, child_ctx));
     	}
 
+    	const todocount = new TodoCount({ $$inline: true });
+
     	const block = {
     		c: function create() {
-    			div5 = element("div");
+    			div6 = element("div");
+    			div2 = element("div");
     			div1 = element("div");
     			div0 = element("div");
     			div0.textContent = ":: Todolist App";
@@ -1764,54 +2162,60 @@ var app = (function () {
     			button = element("button");
     			button.textContent = "Add Todo";
     			t3 = space();
+    			div5 = element("div");
     			div4 = element("div");
     			div3 = element("div");
-    			div2 = element("div");
 
     			for (let i = 0; i < each_blocks.length; i += 1) {
     				each_blocks[i].c();
     			}
 
-    			attr_dev(div0, "class", "title");
-    			add_location(div0, file$3, 18, 8, 351);
-    			attr_dev(div1, "class", "well");
-    			add_location(div1, file$3, 17, 4, 323);
+    			t4 = space();
+    			create_component(todocount.$$.fragment);
+    			add_location(div0, file$4, 20, 12, 541);
+    			attr_dev(div1, "class", "title");
+    			add_location(div1, file$4, 19, 8, 508);
+    			attr_dev(div2, "class", "well");
+    			add_location(div2, file$4, 18, 4, 480);
     			attr_dev(button, "class", "btn btn-primary");
-    			add_location(button, file$3, 22, 4, 433);
-    			attr_dev(div2, "class", "row");
-    			add_location(div2, file$3, 25, 8, 599);
-    			attr_dev(div3, "class", "panel-body");
-    			add_location(div3, file$3, 24, 4, 565);
-    			attr_dev(div4, "class", "panel panel-default panel-borderless");
-    			add_location(div4, file$3, 23, 4, 509);
-    			attr_dev(div5, "class", "container");
-    			add_location(div5, file$3, 16, 0, 294);
+    			add_location(button, file$4, 23, 4, 601);
+    			attr_dev(div3, "class", "row");
+    			add_location(div3, file$4, 26, 8, 767);
+    			attr_dev(div4, "class", "panel-body");
+    			add_location(div4, file$4, 25, 4, 733);
+    			attr_dev(div5, "class", "panel panel-default panel-borderless");
+    			add_location(div5, file$4, 24, 4, 677);
+    			attr_dev(div6, "class", "container");
+    			add_location(div6, file$4, 17, 0, 423);
     			dispose = listen_dev(button, "click", /*goAddTodo*/ ctx[2], false, false, false);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
     		},
     		m: function mount(target, anchor) {
-    			insert_dev(target, div5, anchor);
-    			append_dev(div5, div1);
+    			insert_dev(target, div6, anchor);
+    			append_dev(div6, div2);
+    			append_dev(div2, div1);
     			append_dev(div1, div0);
-    			append_dev(div5, t1);
-    			append_dev(div5, button);
-    			append_dev(div5, t3);
+    			append_dev(div6, t1);
+    			append_dev(div6, button);
+    			append_dev(div6, t3);
+    			append_dev(div6, div5);
     			append_dev(div5, div4);
     			append_dev(div4, div3);
-    			append_dev(div3, div2);
 
     			for (let i = 0; i < each_blocks.length; i += 1) {
-    				each_blocks[i].m(div2, null);
+    				each_blocks[i].m(div3, null);
     			}
 
+    			append_dev(div5, t4);
+    			mount_component(todocount, div5, null);
     			current = true;
     		},
     		p: function update(ctx, [dirty]) {
-    			const each_value = /*$state*/ ctx[0].todolist;
+    			const each_value = /*$todoStore*/ ctx[0].todolist;
     			group_outros();
-    			each_blocks = update_keyed_each(each_blocks, dirty, get_key, 1, ctx, each_value, each_1_lookup, div2, outro_and_destroy_block, create_each_block, null, get_each_context);
+    			each_blocks = update_keyed_each(each_blocks, dirty, get_key, 1, ctx, each_value, each_1_lookup, div3, outro_and_destroy_block, create_each_block, null, get_each_context);
     			check_outros();
     		},
     		i: function intro(local) {
@@ -1821,6 +2225,15 @@ var app = (function () {
     				transition_in(each_blocks[i]);
     			}
 
+    			transition_in(todocount.$$.fragment, local);
+
+    			if (!div6_intro) {
+    				add_render_callback(() => {
+    					div6_intro = create_in_transition(div6, fade, { duration: 300 });
+    					div6_intro.start();
+    				});
+    			}
+
     			current = true;
     		},
     		o: function outro(local) {
@@ -1828,22 +2241,24 @@ var app = (function () {
     				transition_out(each_blocks[i]);
     			}
 
+    			transition_out(todocount.$$.fragment, local);
     			current = false;
     		},
     		d: function destroy(detaching) {
-    			if (detaching) detach_dev(div5);
+    			if (detaching) detach_dev(div6);
 
     			for (let i = 0; i < each_blocks.length; i += 1) {
     				each_blocks[i].d();
     			}
 
+    			destroy_component(todocount);
     			dispose();
     		}
     	};
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_fragment$4.name,
+    		id: create_fragment$5.name,
     		type: "component",
     		source: "",
     		ctx
@@ -1852,10 +2267,10 @@ var app = (function () {
     	return block;
     }
 
-    function instance$4($$self, $$props, $$invalidate) {
-    	let $state;
-    	validate_store(state, "state");
-    	component_subscribe($$self, state, $$value => $$invalidate(0, $state = $$value));
+    function instance$5($$self, $$props, $$invalidate) {
+    	let $todoStore;
+    	validate_store(todoStore, "todoStore");
+    	component_subscribe($$self, todoStore, $$value => $$invalidate(0, $todoStore = $$value));
     	let callbacks = { deleteTodo, toggleDone };
 
     	let goAddTodo = () => {
@@ -1869,30 +2284,30 @@ var app = (function () {
     	$$self.$inject_state = $$props => {
     		if ("callbacks" in $$props) $$invalidate(1, callbacks = $$props.callbacks);
     		if ("goAddTodo" in $$props) $$invalidate(2, goAddTodo = $$props.goAddTodo);
-    		if ("$state" in $$props) state.set($state = $$props.$state);
+    		if ("$todoStore" in $$props) todoStore.set($todoStore = $$props.$todoStore);
     	};
 
-    	return [$state, callbacks, goAddTodo];
+    	return [$todoStore, callbacks, goAddTodo];
     }
 
     class TodoList extends SvelteComponentDev {
     	constructor(options) {
     		super(options);
-    		init(this, options, instance$4, create_fragment$4, safe_not_equal, {});
+    		init(this, options, instance$5, create_fragment$5, safe_not_equal, {});
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,
     			tagName: "TodoList",
     			options,
-    			id: create_fragment$4.name
+    			id: create_fragment$5.name
     		});
     	}
     }
 
     /* src\components\NotFound.svelte generated by Svelte v3.16.5 */
-    const file$4 = "src\\components\\NotFound.svelte";
+    const file$5 = "src\\components\\NotFound.svelte";
 
-    function create_fragment$5(ctx) {
+    function create_fragment$6(ctx) {
     	let div2;
     	let div1;
     	let div0;
@@ -1904,11 +2319,11 @@ var app = (function () {
     			div0 = element("div");
     			div0.textContent = "404 - Object Not Found";
     			attr_dev(div0, "class", "title");
-    			add_location(div0, file$4, 7, 8, 125);
+    			add_location(div0, file$5, 7, 8, 125);
     			attr_dev(div1, "class", "well");
-    			add_location(div1, file$4, 6, 4, 97);
+    			add_location(div1, file$5, 6, 4, 97);
     			attr_dev(div2, "class", "container");
-    			add_location(div2, file$4, 5, 0, 68);
+    			add_location(div2, file$5, 5, 0, 68);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -1928,7 +2343,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_fragment$5.name,
+    		id: create_fragment$6.name,
     		type: "component",
     		source: "",
     		ctx
@@ -1940,13 +2355,13 @@ var app = (function () {
     class NotFound extends SvelteComponentDev {
     	constructor(options) {
     		super(options);
-    		init(this, options, null, create_fragment$5, safe_not_equal, {});
+    		init(this, options, null, create_fragment$6, safe_not_equal, {});
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,
     			tagName: "NotFound",
     			options,
-    			id: create_fragment$5.name
+    			id: create_fragment$6.name
     		});
     	}
     }
@@ -1959,9 +2374,9 @@ var app = (function () {
     };
 
     /* src\AppContainer.svelte generated by Svelte v3.16.5 */
-    const file$5 = "src\\AppContainer.svelte";
+    const file$6 = "src\\AppContainer.svelte";
 
-    function create_fragment$6(ctx) {
+    function create_fragment$7(ctx) {
     	let div1;
     	let div0;
     	let current;
@@ -1973,9 +2388,9 @@ var app = (function () {
     			div0 = element("div");
     			create_component(router.$$.fragment);
     			attr_dev(div0, "class", "container");
-    			add_location(div0, file$5, 7, 2, 115);
+    			add_location(div0, file$6, 7, 2, 115);
     			attr_dev(div1, "id", "root");
-    			add_location(div1, file$5, 6, 0, 96);
+    			add_location(div1, file$6, 6, 0, 96);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -2004,7 +2419,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_fragment$6.name,
+    		id: create_fragment$7.name,
     		type: "component",
     		source: "",
     		ctx
@@ -2016,13 +2431,13 @@ var app = (function () {
     class AppContainer extends SvelteComponentDev {
     	constructor(options) {
     		super(options);
-    		init(this, options, null, create_fragment$6, safe_not_equal, {});
+    		init(this, options, null, create_fragment$7, safe_not_equal, {});
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,
     			tagName: "AppContainer",
     			options,
-    			id: create_fragment$6.name
+    			id: create_fragment$7.name
     		});
     	}
     }
