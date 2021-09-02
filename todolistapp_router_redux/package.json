@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "bootstrap": "3.4.1",
-    "immer": "^5.1.0",
+    "immer": "^9.0.6",
     "redux": "3.x.x",
     "svelte": "3.16.5",
     "svelte-spa-router": "^2.0.0",
